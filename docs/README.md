@@ -13,23 +13,25 @@ Este diretório contém a fonte de verdade do produto e da implementação do Dr
 7. [`CALCULATION_ENGINE.md`](CALCULATION_ENGINE.md) — fórmulas, hipóteses, proveniência e confiança.
 8. [`PHYSICS_ENGINE.md`](PHYSICS_ENGINE.md) — modelo físico avançado de bateria, ESC, motor, torque, hélice, ponto de operação e empuxo.
 9. [`BENCH_DATA_WORKSPACE.md`](BENCH_DATA_WORKSPACE.md) — seção Bancada, curvas motor+hélíce, métricas derivadas, gráficos, importação e regras de interpretação.
-10. [`FLIGHT_PROFILES.md`](FLIGHT_PROFILES.md) — estilos de voo e critérios de avaliação.
-11. [`NEXO_DESIGN_SYSTEM.md`](NEXO_DESIGN_SYSTEM.md) — identidade visual herdada do NEXO.
-12. [`UX_SPEC.md`](UX_SPEC.md) — fluxos, navegação e estados de interface.
-13. [`DATA_MODEL.md`](DATA_MODEL.md) — persistência, importação/exportação e versionamento.
-14. [`ASSISTED_INGESTION.md`](ASSISTED_INGESTION.md) — cadastro por URL, extração de imagens por IA, evidência, staging e reconciliação de fontes.
-15. [`MANUFACTURER_SCRAPING.md`](MANUFACTURER_SCRAPING.md) — scraping controlado de páginas oficiais, PDFs/assets, snapshots, segurança e separação scraper × IA.
-16. [`COMPONENT_CATALOG.md`](COMPONENT_CATALOG.md) — categorias, campos e dados de bancada.
-17. [`TEST_STRATEGY.md`](TEST_STRATEGY.md) — testes unitários, integração e validação numérica.
-18. [`SAFETY_AND_LIMITATIONS.md`](SAFETY_AND_LIMITATIONS.md) — limites, incerteza e comunicação responsável.
-19. [`RELEASE_CRITERIA.md`](RELEASE_CRITERIA.md) — gates para etapas, MVP e releases.
-20. [`ROADMAP.md`](ROADMAP.md) — fases e dependências de implementação.
-21. [`DEVELOPMENT.md`](DEVELOPMENT.md) — padrões de desenvolvimento.
-22. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato geral para agentes de IA.
-23. [`prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`](prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md) — primeira orientação executável para a IA implementadora.
-24. [`prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md`](prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md) — orientação futura para implementar a seção Bancada após suas dependências.
-25. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
-26. [`adr/`](adr/README.md) — Architecture Decision Records.
+10. [`PROPULSION_RECOMMENDATION.md`](PROPULSION_RECOMMENDATION.md) — recálculo de massa por candidato, perfil operacional e ranking explicável de motor+hélíce+bateria/tensão.
+11. [`FLIGHT_PROFILES.md`](FLIGHT_PROFILES.md) — estilos de voo e critérios de avaliação.
+12. [`NEXO_DESIGN_SYSTEM.md`](NEXO_DESIGN_SYSTEM.md) — identidade visual herdada do NEXO.
+13. [`UX_SPEC.md`](UX_SPEC.md) — fluxos, navegação e estados de interface.
+14. [`DATA_MODEL.md`](DATA_MODEL.md) — persistência, importação/exportação e versionamento.
+15. [`ASSISTED_INGESTION.md`](ASSISTED_INGESTION.md) — cadastro por URL, extração de imagens por IA, evidência, staging e reconciliação de fontes.
+16. [`MANUFACTURER_SCRAPING.md`](MANUFACTURER_SCRAPING.md) — scraping controlado de páginas oficiais, PDFs/assets, snapshots, segurança e separação scraper × IA.
+17. [`COMPONENT_CATALOG.md`](COMPONENT_CATALOG.md) — categorias, campos e dados de bancada.
+18. [`TEST_STRATEGY.md`](TEST_STRATEGY.md) — testes unitários, integração e validação numérica.
+19. [`SAFETY_AND_LIMITATIONS.md`](SAFETY_AND_LIMITATIONS.md) — limites, incerteza e comunicação responsável.
+20. [`RELEASE_CRITERIA.md`](RELEASE_CRITERIA.md) — gates para etapas, MVP e releases.
+21. [`ROADMAP.md`](ROADMAP.md) — fases e dependências de implementação.
+22. [`DEVELOPMENT.md`](DEVELOPMENT.md) — padrões de desenvolvimento.
+23. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato geral para agentes de IA.
+24. [`prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`](prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md) — primeira orientação executável para a IA implementadora.
+25. [`prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md`](prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md) — orientação futura para implementar a seção Bancada após suas dependências.
+26. [`prompts/ETAPA_8_PROPULSION_RECOMMENDATION.md`](prompts/ETAPA_8_PROPULSION_RECOMMENDATION.md) — orientação futura para implementar o recomendador de propulsão orientado ao uso.
+27. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
+28. [`adr/`](adr/README.md) — Architecture Decision Records.
 
 Na raiz do repositório também existem:
 
@@ -48,17 +50,18 @@ O MVP ampliado adota:
 - IndexedDB apenas para cache/drafts/preferências/offline auxiliar;
 - calculation engine e domínio independentes de UI, banco e IA;
 - duas rotas de propulsão complementares: dados de bancada como referência preferencial e Physics Engine teórico somente quando houver parâmetros suficientes;
-- workspace Bancada como interface auditável para curvas motor+hélíce e seus dados derivados.
+- workspace Bancada como interface auditável para curvas motor+hélíce e seus dados derivados;
+- recomendador de propulsão que recalcula a massa de cada candidato e aplica compatibilidade + perfil de uso antes do ranking.
 
-A mudança de infraestrutura é detalhada no [`adr/0002-postgresql-object-storage-ollama.md`](adr/0002-postgresql-object-storage-ollama.md). O pipeline geral de cadastro por URL e imagens é especificado em [`ASSISTED_INGESTION.md`](ASSISTED_INGESTION.md); a coleta direta de páginas oficiais de fabricantes é detalhada em [`MANUFACTURER_SCRAPING.md`](MANUFACTURER_SCRAPING.md); e a interpretação/visualização de curvas é normatizada por [`BENCH_DATA_WORKSPACE.md`](BENCH_DATA_WORKSPACE.md).
+A mudança de infraestrutura é detalhada no [`adr/0002-postgresql-object-storage-ollama.md`](adr/0002-postgresql-object-storage-ollama.md). O pipeline geral de cadastro por URL e imagens é especificado em [`ASSISTED_INGESTION.md`](ASSISTED_INGESTION.md); a coleta direta de páginas oficiais de fabricantes é detalhada em [`MANUFACTURER_SCRAPING.md`](MANUFACTURER_SCRAPING.md); a interpretação/visualização de curvas é normatizada por [`BENCH_DATA_WORKSPACE.md`](BENCH_DATA_WORKSPACE.md); e a seleção orientada ao uso é normatizada por [`PROPULSION_RECOMMENDATION.md`](PROPULSION_RECOMMENDATION.md).
 
 ## Hierarquia de autoridade
 
 Quando documentos entrarem em conflito, utilizar esta prioridade:
 
 1. `PRD.md` para intenção de produto e escopo.
-2. `PRODUCT_SPEC.md` para comportamento funcional.
-3. `CALCULATION_ENGINE.md`, `PHYSICS_ENGINE.md` e `BENCH_DATA_WORKSPACE.md` para regras matemáticas, propulsão física e semântica dos dados de bancada.
+2. `PRODUCT_SPEC.md` para comportamento funcional geral.
+3. `CALCULATION_ENGINE.md`, `PHYSICS_ENGINE.md`, `BENCH_DATA_WORKSPACE.md` e `PROPULSION_RECOMMENDATION.md` para regras matemáticas, propulsão física, semântica dos dados de bancada e recomendação técnica.
 4. `DOMAIN_MODEL.md`, `DATA_MODEL.md`, `ASSISTED_INGESTION.md` e `MANUFACTURER_SCRAPING.md` para contratos de dados, persistência e ingestão.
 5. `ARCHITECTURE.md` e ADRs para limites e decisões técnicas.
 6. `NEXO_DESIGN_SYSTEM.md` e `UX_SPEC.md` para apresentação e interação.
@@ -73,6 +76,7 @@ Mudanças que alterem uma regra superior devem atualizar os documentos dependent
 - fórmula geral alterada → `CALCULATION_ENGINE.md`, testes e changelog quando material;
 - modelo de bateria/motor/torque/hélice/propulsão alterado → `PHYSICS_ENGINE.md`, `CALCULATION_ENGINE.md` quando aplicável, fixtures físicos e testes;
 - semântica/importação/visualização de curvas de bancada alterada → `BENCH_DATA_WORKSPACE.md`, testes e roadmap quando aplicável;
+- recomendação/seleção de propulsão alterada → `PROPULSION_RECOMMENDATION.md`, perfis, testes, rastreabilidade e roadmap quando aplicável;
 - schema alterado → `DOMAIN_MODEL.md`/`DATA_MODEL.md`, migration e testes;
 - pipeline de ingestão alterado → `ASSISTED_INGESTION.md`, `MANUFACTURER_SCRAPING.md` quando aplicável, segurança, testes e roadmap quando a sequência mudar;
 - requisito alterado → PRD/Product Spec, user stories e rastreabilidade;
@@ -83,7 +87,7 @@ Mudanças que alterem uma regra superior devem atualizar os documentos dependent
 
 ## Estado da especificação
 
-Versão da arquitetura/roadmap: **0.6**  
+Versão da arquitetura/roadmap: **0.7**  
 Status: **planejamento / pré-MVP**
 
 A documentação deve evoluir junto com o código. Não manter decisões relevantes apenas em issues, chats ou prompts temporários.
