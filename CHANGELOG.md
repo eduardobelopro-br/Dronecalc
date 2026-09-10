@@ -16,6 +16,9 @@ O formato segue a ideia de **Keep a Changelog**, sem assumir versionamento de re
 - especificação do motor de cálculo;
 - Physics Engine para bateria sob carga, motor, torque, hélice e propulsão;
 - perfis de voo, incluindo Mini Long Range;
+- perfil operacional orientado ao uso para ponderar regimes quando houver dados defensáveis;
+- recomendação de conjunto motor+hélíce+bateria/tensão com recálculo de massa por candidato, hard constraints antes do score e ranking explicável;
+- separação explícita entre score de adequação, cobertura dos dados e confiança;
 - adoção da identidade visual NEXO;
 - UX spec;
 - catálogo de componentes;
@@ -25,10 +28,11 @@ O formato segue a ideia de **Keep a Changelog**, sem assumir versionamento de re
 - regras explícitas para potência `V × I`, eficiência estática `gf/W`, RPM ideal sem carga e velocidade teórica de passo;
 - proibição de apresentar `pitch × RPM` como velocidade real/máxima do drone;
 - estratégia de testes ampliada para dados de bancada, ingestão e segurança;
-- roadmap v0.6;
+- roadmap v0.7;
 - guia de desenvolvimento e contribuição;
 - contrato para implementação assistida por IA;
 - prompt futuro para implementação do Workspace Bancada;
+- prompt futuro para implementação do recomendador de propulsão;
 - ADRs e matriz de rastreabilidade.
 
 ## Política futura
@@ -39,6 +43,6 @@ Quando a primeira versão executável for definida, adotar versionamento semânt
 - schemas de projeto/export;
 - dados/curvas de bancada;
 - compatibilidade;
-- perfis/scoring;
+- perfis/scoring/ranking;
 - experiência do usuário;
 - APIs públicas futuras.
