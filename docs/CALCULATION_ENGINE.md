@@ -1,6 +1,6 @@
 # Motor de Cálculo — DroneCalc
 
-**Versão:** 0.1  
+**Versão:** 0.2  
 **Objetivo:** definir fórmulas, premissas, disponibilidade, proveniência e limites dos cálculos.
 
 ## 1. Princípios
@@ -13,6 +13,8 @@
 6. O motor não deve extrapolar curva de bancada por padrão.
 7. Resultados dependentes de hipóteses exibem as hipóteses.
 8. A versão do algoritmo acompanha cada análise persistida/exportada.
+9. Modelos avançados de bateria, motor, torque, hélice e ponto de operação seguem `PHYSICS_ENGINE.md`; eles complementam, não substituem, dados de bancada aplicáveis.
+10. `KV + tensão + diâmetro de hélice` não é informação suficiente para afirmar empuxo real com confiança.
 
 ## 2. Unidades canônicas
 
@@ -26,7 +28,9 @@ Recomendação inicial do núcleo:
 - energia: watt-hora (`Wh`);
 - capacidade: ampere-hora (`Ah`) no cálculo, mAh apenas em entrada/apresentação;
 - tempo: segundos/minutos conforme contrato explícito;
-- empuxo: Newtons para física rigorosa ou grama-força equivalente na UI. Nunca confundir massa com força no domínio.
+- empuxo: Newtons para física rigorosa ou grama-força equivalente na UI. Nunca confundir massa com força no domínio;
+- torque: N·m no Physics Engine;
+- velocidade angular: rad/s no Physics Engine, com RPM convertido explicitamente.
 
 A implementação deve centralizar conversões.
 
@@ -120,6 +124,10 @@ Classificação obrigatória: valor de fabricante/derivado, não medição. A UI
 
 Quando existir `measuredContinuousCurrentA`, preferi-lo para análise prática, preservando ambos os dados.
 
+### 5.6 Modelo sob carga
+
+Sag, resistência interna, SOC e tensão sob carga pertencem ao modelo avançado definido em `PHYSICS_ENGINE.md`. C-rating não deve ser usado como substituto de resistência interna.
+
 ## 6. Potência elétrica
 
 ```text
@@ -143,6 +151,8 @@ Para motores não equivalentes:
 ```text
 T_total = Σ T_motor_i
 ```
+
+`T_motor` deve vir preferencialmente de bancada/interpolação aplicável. Na ausência dela, pode vir do Physics Engine somente quando existirem parâmetros físicos suficientes, com `source`, `confidence` e `modelVersion` explícitos.
 
 ### 7.2 Thrust-to-weight ratio (TWR)
 
@@ -174,7 +184,7 @@ Em representação equivalente para lookup em curva em gramas:
 required_thrust_gf_per_motor ≈ takeoff_mass_g / motor_count
 ```
 
-O motor procura na curva motor+hélíce o ponto que produz esse empuxo e interpola corrente, potência e throttle.
+O motor procura primeiro na curva motor+hélice o ponto que produz esse empuxo e interpola corrente, potência e throttle. Se não houver curva aplicável, o Physics Engine pode procurar um ponto de operação teórico se seus requisitos de entrada forem satisfeitos.
 
 A hipótese de distribuição uniforme deve ser registrada.
 
@@ -240,11 +250,11 @@ ou outro modelo explicitamente configurado. Não aplicar duas vezes a mesma rese
 
 ### 12.1 Hover
 
-`average_current_A` vem do ponto interpolado de hover somado às cargas auxiliares.
+`average_current_A` vem preferencialmente do ponto interpolado de hover somado às cargas auxiliares. Na ausência de bancada, pode vir do ponto de operação do Physics Engine quando válido.
 
 ### 12.2 Cruzeiro
 
-Só deve ser apresentado se houver modelo/entrada que diferencie cruzeiro de hover. Não inventar “corrente de cruzeiro” como porcentagem fixa silenciosa.
+Só deve ser apresentado se houver modelo/entrada que diferencie cruzeiro de hover. Não inventar “corrente de cruzeiro” como porcentagem fixa silenciosa. Modelos com advance ratio pertencem ao `PHYSICS_ENGINE.md`.
 
 ### 12.3 Limitações
 
@@ -304,6 +314,8 @@ RPM_no_load ≈ KV × V
 
 Esse valor **não é RPM real com hélice** e não deve ser utilizado para prever empuxo. Classificar como estimativa de baixa confiança/valor teórico.
 
+RPM carregado, torque e equilíbrio motor × hélice são definidos no `PHYSICS_ENGINE.md`.
+
 ## 16. Compatibilidade elétrica
 
 ### 16.1 Tensão bateria × motor
@@ -352,12 +364,14 @@ Orientação inicial:
 
 ### Medium
 - interpolação dentro de curva medida;
-- cálculo com hipóteses razoáveis e dados de fabricante.
+- cálculo com hipóteses razoáveis e dados de fabricante;
+- modelo físico calibrado dentro do domínio validado, quando documentado.
 
 ### Low
 - estimativa baseada em informação incompleta;
 - dado de fabricante sem contexto suficiente;
-- aproximação teórica como RPM sem carga.
+- aproximação teórica como RPM sem carga;
+- modelo físico genérico não calibrado.
 
 A confiança final de um cálculo composto não pode ser maior que a confiabilidade efetiva das entradas determinantes sem justificativa explícita.
 
@@ -387,6 +401,8 @@ Cada cálculo crítico deverá ter um identificador estável, por exemplo:
 - `ENDURANCE_CURRENT_MODEL_V1`;
 - `CG_WEIGHTED_POSITION_V1`.
 
+Os modelos avançados possuem IDs adicionais definidos em `PHYSICS_ENGINE.md`.
+
 Isso facilita testes, auditoria e comparação entre versões.
 
 ## 21. Casos inválidos obrigatórios
@@ -399,11 +415,46 @@ O motor deve recusar ou marcar como inválido:
 - capacidade <= 0;
 - número de células <= 0;
 - C-rating negativo;
-- corrente negativa;
+- corrente negativa fora de regime explicitamente suportado;
 - curva sem pontos suficientes para interpolação;
 - divisão por zero;
-- alvo de interpolação fora da curva quando extrapolação estiver desabilitada.
+- alvo de interpolação fora da curva quando extrapolação estiver desabilitada;
+- falha de convergência de solver físico;
+- eficiência fisicamente impossível fora da tolerância numérica.
 
 ## 22. Regra de ouro
 
 Se o DroneCalc não possui dados suficientes para produzir um resultado defensável, a resposta correta é **“dados insuficientes”**, acompanhada do que falta — não um número inventado.
+
+## 23. Physics Engine avançado
+
+A especificação normativa para os cálculos que exigem acoplamento físico entre bateria, ESC, motor e hélice está em [`PHYSICS_ENGINE.md`](PHYSICS_ENGINE.md).
+
+Ela cobre:
+
+```text
+bateria sob carga
+→ tensão/sag
+→ ESC/drive
+→ motor elétrico
+→ torque
+→ carga aerodinâmica da hélice
+→ solver do ponto de operação
+→ RPM/corrente/torque
+→ empuxo/potência/eficiência
+```
+
+A implementação deve manter duas rotas explícitas:
+
+```text
+curva de bancada aplicável
+  → usar/interpolar dados reais
+
+sem bancada + parâmetros físicos suficientes
+  → Physics Engine
+
+sem bancada + parâmetros insuficientes
+  → dados insuficientes
+```
+
+O modelo teórico pode ser comparado e calibrado contra bancada, mas nunca deve sobrescrever ou reclassificar silenciosamente uma medição original.
