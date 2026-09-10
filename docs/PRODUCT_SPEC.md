@@ -1,21 +1,22 @@
 # Product Spec — DroneCalc
 
-**Versão:** 0.2  
+**Versão:** 0.3  
 **Status:** pré-MVP
 
 Este documento descreve o comportamento funcional esperado. O PRD define o porquê; este documento define **o que a aplicação deve fazer**.
 
 ## 1. Estrutura principal da aplicação
 
-A aplicação terá cinco áreas principais:
+A aplicação terá seis áreas principais:
 
 1. **Projetos** — lista, criação, duplicação e gerenciamento.
 2. **Builder** — montagem do drone por componentes.
 3. **Análise** — resultados técnicos e alertas.
 4. **Comparador** — comparação de variantes.
-5. **Catálogo** — componentes, cadastro assistido, evidências, dados de fabricante e testes de bancada.
+5. **Catálogo** — componentes, cadastro assistido, evidências e dados de fabricante.
+6. **Bancada** — curvas motor+hélíce, amostras, importação, validação, visualização e integração com análise.
 
-A navegação deverá manter o projeto ativo como contexto persistente.
+A navegação deverá manter o projeto ativo como contexto persistente quando aplicável.
 
 ## 2. Criação de projeto
 
@@ -119,7 +120,8 @@ Resultados mínimos:
 - empuxo total;
 - TWR;
 - throttle estimado de hover quando suportado;
-- eficiência g/W quando dados permitirem.
+- eficiência estática `gf/W` quando dados permitirem;
+- acesso à curva de bancada usada quando aplicável.
 
 ### Elétrica
 - corrente por motor;
@@ -299,7 +301,7 @@ URL
 → publicação
 ```
 
-O comportamento detalhado é normatizado por `ASSISTED_INGESTION.md`.
+O comportamento detalhado é normatizado por `ASSISTED_INGESTION.md` e `MANUFACTURER_SCRAPING.md`.
 
 ### 11.3 Imagens técnicas
 
@@ -327,29 +329,96 @@ Se HTML, imagem ou documento divergirem, mostrar conflito para revisão. Não es
 
 Exemplo: `KV = 1860` lido da ficha é dado extraído. `Kt` calculado a partir desse KV é dado derivado pelo Physics Engine e deve registrar fórmula/versão. A UI e persistência não podem apresentá-los como se ambos tivessem sido declarados pelo fabricante.
 
-## 12. Testes de bancada
+## 12. Bancada e testes de propulsão
+
+A seção **Bancada** é uma área própria da aplicação e deve seguir `BENCH_DATA_WORKSPACE.md`.
 
 Um conjunto de teste motor/hélice deve incluir no mínimo:
 
-- motor;
-- hélice;
+- motor/variante;
+- hélice/variante ou descrição estruturada;
 - tensão/células ou tensão medida;
 - condições/observações quando conhecidas;
-- amostras ordenadas.
+- fonte/evidência;
+- amostras ordenadas;
+- status de revisão.
 
 Amostras típicas:
 
-- throttle;
+- throttle (%);
 - thrust;
 - current;
 - voltage;
 - power;
-- RPM opcional;
-- efficiency opcional ou derivável.
+- RPM;
+- eficiência estática `gf/W` quando medida ou derivável.
 
-Interpolação só pode ocorrer dentro do intervalo coberto pelos dados, salvo modelo de extrapolação explicitamente documentado. O padrão do MVP é **não extrapolar**.
+### 12.1 Semântica obrigatória
+
+- `throttle %` é comando do ESC, não aceleração física;
+- `gf/W` é eficiência estática de empuxo, não eficiência energética percentual;
+- potência derivada usa `P = V × I` da mesma amostra;
+- tensão medida por ponto deve ser preferida quando disponível;
+- ausência de tensão não autoriza assumir silenciosamente tensão nominal;
+- `KV × V` é apenas referência de RPM ideal sem carga;
+- `pitch × RPM` pode gerar **velocidade teórica de passo**, mas nunca deve ser apresentada como velocidade real/máxima do drone.
+
+### 12.2 Velocidade teórica de passo
+
+Quando pitch e RPM existirem:
+
+```text
+pitch_m = pitch_in × 0.0254
+pitch_speed_m_min = pitch_m × RPM
+pitch_speed_km_h = pitch_speed_m_min × 60 / 1000
+```
+
+A UI deve apresentar aviso de que esse valor ignora slip, arrasto, advance ratio e outros efeitos aerodinâmicos.
+
+### 12.3 Interpolação
+
+Interpolação só pode ocorrer dentro do intervalo coberto pelos dados válidos/aprovados, salvo modelo de extrapolação explicitamente documentado. O padrão é **não extrapolar**.
+
+Para hover, o lookup/interpolação deve preferir empuxo requerido como variável-alvo, e não assumir linearidade em throttle.
+
+### 12.4 Gráficos
+
+Não usar por padrão uma única escala Y para grandezas incompatíveis como corrente, empuxo, RPM e `gf/W`.
+
+Visualizações recomendadas:
+
+- empuxo × throttle;
+- corrente/potência × throttle;
+- RPM × throttle;
+- eficiência estática × throttle ou empuxo.
+
+A tabela permanece representação auditável/acessível dos dados.
+
+### 12.5 Importação e IA
+
+A seção pode receber dados por:
+
+- entrada manual;
+- CSV/tabela;
+- scraping de fabricante;
+- PDF/datasheet;
+- imagem técnica analisada por IA;
+- digitalização de gráfico futura/revisada.
 
 Curvas digitalizadas a partir de imagens devem manter essa proveniência e não recebem automaticamente o mesmo nível de confiança de dados tabulares originais.
+
+### 12.6 Integração com análise
+
+Curva válida/aprovada pode alimentar:
+
+```text
+empuxo requerido por motor
+→ lookup/interpolação dentro da faixa
+→ corrente + tensão + potência + RPM
+→ TWR / hover / eficiência / autonomia
+```
+
+Se o alvo estiver fora da curva, retornar indisponibilidade/warning; não extrapolar silenciosamente.
 
 ## 13. Unidades
 
@@ -364,6 +433,8 @@ Entradas e apresentação podem aceitar:
 - Wh;
 - N·m;
 - RPM;
+- gf/W;
+- km/h apenas com semântica explícita;
 - g/gf e N para empuxo conforme contexto de UI, com representação interna inequívoca.
 
 O motor utiliza unidades canônicas definidas no domínio.
@@ -389,7 +460,7 @@ PostgreSQL é a fonte principal de dados persistidos do produto.
 Requisitos:
 
 - migrations versionadas;
-- projects/catalog/staging/evidências persistidos no backend;
+- projects/catalog/staging/evidências/bench tests persistidos no backend;
 - MinIO/S3-compatible para imagens/documentos grandes;
 - IndexedDB apenas para cache, drafts, preferências e suporte offline auxiliar;
 - autosave/drafts sem perda silenciosa;
@@ -405,11 +476,12 @@ Requisitos:
 - tabelas com cabeçalhos semânticos;
 - mensagens de validação associadas aos inputs;
 - uso por teclado para fluxos principais;
-- conflitos/evidências de import legíveis sem depender apenas de cor.
+- conflitos/evidências de import legíveis sem depender apenas de cor;
+- gráficos da Bancada acompanhados de tabela/resumo acessível.
 
 ## 17. Responsividade
 
-Desktop é prioridade do MVP, pois comparação, builder e revisão de imports exigem densidade de informação. Tablet deve permanecer utilizável. Mobile pode apresentar layout simplificado, mas não é requisito de paridade completa no primeiro ciclo.
+Desktop é prioridade do MVP, pois comparação, builder, Bancada e revisão de imports exigem densidade de informação. Tablet deve permanecer utilizável. Mobile pode apresentar layout simplificado, mas não é requisito de paridade completa no primeiro ciclo.
 
 ## 18. Critérios de aceite gerais
 
@@ -422,5 +494,7 @@ Uma funcionalidade só está concluída quando:
 - estados de erro/incompleto foram considerados;
 - dados extraídos por IA não pulam staging/revisão;
 - evidência de campos importados é preservada;
+- Bancada não apresenta pitch speed como velocidade real do drone;
+- grandezas de unidades incompatíveis não são visualizadas numa escala única enganosa por padrão;
 - identidade NEXO foi respeitada;
 - documentação foi atualizada se houve mudança de contrato.
