@@ -1,26 +1,27 @@
 # Matriz de Rastreabilidade de Requisitos — DroneCalc
 
-**Versão:** 0.2
+**Versão:** 0.3
 
 Este documento liga requisitos do PRD às especificações, etapas do roadmap e tipos de teste esperados.
 
 | Req. | Resumo | Especificação principal | Roadmap | Teste esperado |
 |---|---|---|---|---|
-| RF-01 | Projetos | PRODUCT_SPEC §2 | Fase 3 | integração/UI |
-| RF-02 | Componentes | COMPONENT_CATALOG | Fases 3, 5 e 6 | schema/UI/ingestão |
-| RF-03 | Massa | CALCULATION_ENGINE §3 | Fase 4 | unitário + fixture |
-| RF-04 | Energia | CALCULATION_ENGINE §5 | Fase 4 | unitário |
-| RF-05 | Sistema elétrico | CALCULATION_ENGINE §16 | Fase 4 | unitário + limites |
-| RF-06 | Propulsão | CALCULATION_ENGINE §§7–9 + PHYSICS_ENGINE | Fase 7 | unitário + fixture de curva/modelo |
-| RF-07 | Autonomia | CALCULATION_ENGINE §12 | Fase 8 | unitário + regressão |
-| RF-08 | Perfis de voo | FLIGHT_PROFILES | Fase 10 | unitário/scoring |
-| RF-09 | Compatibilidade | PRODUCT_SPEC §7 | Fases 4–10 | unitário + integração |
-| RF-10 | Proveniência | PRODUCT_SPEC §6 + ASSISTED_INGESTION | Todas as etapas técnicas | unitário + UI |
-| RF-11 | Comparação | PRODUCT_SPEC §8 | Fase 12 | integração/UI |
+| RF-01 | Projetos | PRODUCT_SPEC §2 | Fases 2 e 9 | integração/UI |
+| RF-02 | Componentes | COMPONENT_CATALOG | Fases 4, 5, 6 e 9 | schema/UI/ingestão |
+| RF-03 | Massa | CALCULATION_ENGINE §3 | Fase 3 | unitário + fixture |
+| RF-04 | Energia | CALCULATION_ENGINE §5 | Fase 3 | unitário |
+| RF-05 | Sistema elétrico | CALCULATION_ENGINE §16 + PHYSICS_ENGINE | Fases 3 e 7 | unitário + limites |
+| RF-06 | Propulsão | CALCULATION_ENGINE §§7–9 + PHYSICS_ENGINE + BENCH_DATA_WORKSPACE | Fase 7 | unitário + fixture de curva/modelo |
+| RF-07 | Autonomia | CALCULATION_ENGINE §12 | Fases 3, 7 e 9 | unitário + regressão |
+| RF-08 | Perfis de voo | FLIGHT_PROFILES | Fase 8 | unitário/scoring |
+| RF-09 | Compatibilidade | PRODUCT_SPEC §7 | Fases 3, 7, 8 e 9 | unitário + integração |
+| RF-10 | Proveniência | PRODUCT_SPEC §6 + ASSISTED_INGESTION + BENCH_DATA_WORKSPACE | Todas as etapas técnicas | unitário + UI |
+| RF-11 | Comparação | PRODUCT_SPEC §8 | Fase 10 | integração/UI |
 | RF-12 | Unidades | CALCULATION_ENGINE §2 | Etapa 1D | unitário |
 | RF-13 | Persistência | DATA_MODEL | Fase 2 | integração/migrations |
-| RF-14 | Import/export | DATA_MODEL | Etapas 3D e 7B | integração |
-| RF-15 | Cadastro assistido multimodal | ASSISTED_INGESTION + PRODUCT_SPEC §11 | Fases 5 e 6 | segurança + schema + integração/UI |
+| RF-14 | Import/export | DATA_MODEL + BENCH_DATA_WORKSPACE | Etapa 7C e Fase 11 | integração |
+| RF-15 | Cadastro assistido multimodal | ASSISTED_INGESTION + MANUFACTURER_SCRAPING + PRODUCT_SPEC §11 | Fases 5 e 6 | segurança + schema + integração/UI |
+| RF-16 | Workspace Bancada | BENCH_DATA_WORKSPACE + PRODUCT_SPEC §12 + UX_SPEC §14.1 | Etapas 7A–7E | unitário + integração + UI |
 
 ## Requisitos não funcionais
 
@@ -30,7 +31,7 @@ Este documento liga requisitos do PRD às especificações, etapas do roadmap e 
 | RNF-02 | Testabilidade | domínio/motor sem React e suite unitária |
 | RNF-03 | Rastreabilidade | formulaId/modelVersion/proveniência/evidência por campo |
 | RNF-04 | Performance | medições quando UI/análise/ingestão estiverem funcionais |
-| RNF-05 | Acessibilidade | UX spec + testes/inspeção |
+| RNF-05 | Acessibilidade | UX spec + testes/inspeção, inclusive tabela/gráficos de Bancada |
 | RNF-06 | Internacionalização | regras sem dependência de strings pt-BR |
 | RNF-07 | Evolução | perfis/data-driven, módulos desacoplados e AI Provider substituível |
 | RNF-08 | Segurança de dados/ingestão | secrets ausentes, anti-SSRF, schema validation, staging e prompt-injection boundaries |
@@ -67,7 +68,7 @@ Rastreia: RF-04, RF-05, RF-09.
 **Quando** hover exige ponto entre duas amostras  
 **Então** interpolar dentro da curva e marcar origem `interpolated`.
 
-Rastreia: RF-06, RF-10.
+Rastreia: RF-06, RF-10, RF-16.
 
 ### AC-05 — Sem extrapolação
 
@@ -75,7 +76,7 @@ Rastreia: RF-06, RF-10.
 **Quando** análise de propulsão é executada  
 **Então** não extrapolar por padrão e informar indisponibilidade/limitação.
 
-Rastreia: RF-06, RF-10.
+Rastreia: RF-06, RF-10, RF-16.
 
 ### AC-06 — Autonomia
 
@@ -172,6 +173,38 @@ Rastreia: RF-06, RF-10, RF-15, RNF-03.
 **Então** o destino é bloqueado e nenhum conteúdo interno é entregue ao extractor/IA.
 
 Rastreia: RF-15, RNF-08.
+
+### AC-18 — Potência e eficiência de bancada
+
+**Dado** uma amostra com tensão, corrente e empuxo válidos da mesma condição  
+**Quando** a Bancada calcula valores derivados  
+**Então** `P = V × I` é identificado como cálculo e `thrust_gf / P_W` aparece como **eficiência estática (gf/W)**, nunca como percentual.
+
+Rastreia: RF-06, RF-10, RF-16, RNF-01, RNF-03.
+
+### AC-19 — Tensão ausente
+
+**Dado** uma curva com corrente/empuxo/RPM, mas sem tensão por ponto ou tensão de fonte explicitamente declarada  
+**Quando** potência/eficiência derivada é solicitada  
+**Então** o sistema não inventa tensão nominal e informa dado insuficiente/warning apropriado.
+
+Rastreia: RF-10, RF-12, RF-16, RNF-03.
+
+### AC-20 — Pitch speed não é velocidade de voo
+
+**Dado** pitch da hélice e RPM disponíveis  
+**Quando** a métrica geométrica é calculada  
+**Então** ela é exibida apenas como **Velocidade teórica de passo**, com aviso de que não representa velocidade real/máxima da aeronave.
+
+Rastreia: RF-10, RF-16, RNF-03, RNF-05.
+
+### AC-21 — Gráfico de bancada
+
+**Dado** curva contendo corrente, empuxo, RPM e `gf/W`  
+**Quando** o usuário abre a visualização  
+**Então** a UI não usa por padrão uma única escala Y para essas grandezas incompatíveis e mantém tabela acessível com unidades explícitas.
+
+Rastreia: RF-12, RF-16, RNF-05.
 
 ## Atualização da matriz
 
