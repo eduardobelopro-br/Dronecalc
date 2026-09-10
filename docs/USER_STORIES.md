@@ -1,6 +1,6 @@
 # User Stories — DroneCalc
 
-**Versão:** 0.1
+**Versão:** 0.2
 
 ## 1. Objetivo
 
@@ -58,6 +58,7 @@ Como usuário, quero saber o impacto de cada peça na massa do drone.
 
 - mostra massa por linha e categoria;
 - mostra massa seca/bateria/payload/decolagem conforme definição;
+- atualiza ao adicionar/remover/substituir peças;
 - componente sem massa não vira 0 silenciosamente;
 - lista dados ausentes.
 
@@ -233,16 +234,60 @@ Como usuário, quero posicionar componentes e estimar CG.
 - CG parcial é identificado;
 - fixture simétrico retorna centro esperado.
 
-## US-21 — Otimização futura
+## US-21 — Recomendar conjunto de propulsão
 
-Como usuário, quero informar objetivos e receber configurações candidatas.
+Como usuário, quero que o DroneCalc considere as peças que já escolhi e o uso pretendido para recomendar conjuntos de propulsão adequados e eficientes.
+
+**Aceite:**
+
+- candidato é motor + hélice + bateria/tensão, incluindo ESC quando necessário à análise;
+- cada candidato recebe uma variante virtual própria;
+- massa de decolagem é recalculada incluindo a massa dos próprios componentes candidatos;
+- empuxo requerido/hover/TWR são recalculados após a massa;
+- compatibilidade elétrica/mecânica é avaliada antes do score;
+- dados de bancada aprovados têm prioridade quando aplicáveis;
+- conjunto de maior empuxo máximo não vence automaticamente;
+- perfil de voo/uso influencia o ranking;
+- candidato com dados insuficientes não recebe valores físicos inventados;
+- aplicar a recomendação ao projeto exige ação explícita.
+
+## US-22 — Entender o ranking de propulsão
+
+Como usuário, quero entender por que um conjunto foi recomendado acima de outro.
+
+**Aceite:**
+
+- mostra massa final do candidato;
+- mostra consumo/eficiência/hover/TWR/autonomia disponíveis;
+- mostra warnings e hard constraints;
+- mostra `profileScore`, cobertura e confiança separadamente;
+- apresenta principais vantagens/desvantagens;
+- informa curva/modelo/perfil e versões relevantes;
+- `danger` nunca é escondido por score.
+
+## US-23 — Perfil operacional incompleto
+
+Como usuário, quero que o sistema seja transparente quando não possui dados para todos os regimes do meu uso.
+
+**Aceite:**
+
+- fase sem dado/modelo não é tratada como corrente zero;
+- cobertura incompleta é mostrada;
+- cruzeiro não é inventado como porcentagem fixa de hover;
+- ranking/resultados são limitados conforme a falta de dados.
+
+## US-24 — Otimização global futura
+
+Como usuário, quero informar objetivos e receber configurações candidatas explorando um espaço muito maior de combinações.
 
 **Aceite futuro:**
 
+- parte do recomendador básico já validado;
 - candidatos incompatíveis conhecidos são removidos;
 - ranking é multiobjetivo;
 - trade-offs são explicados;
 - fontes e confiança acompanham resultados;
+- pode dimensionar bateria/constraints iterativamente com critério de convergência;
 - usuário pode transformar candidato em projeto editável.
 
 ## Uso em issues
