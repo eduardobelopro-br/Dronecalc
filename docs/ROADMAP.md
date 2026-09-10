@@ -1,8 +1,8 @@
 # Roadmap — DroneCalc
 
-**Versão:** 0.5  
+**Versão:** 0.6  
 **Status:** planejamento técnico revisado  
-**Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, da persistência e da IA e evoluindo a propulsão por duas rotas: dados de bancada e modelo físico validável.
+**Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, da persistência e da IA e evoluindo a propulsão por duas rotas: dados de bancada auditáveis e modelo físico validável.
 
 ## 1. Princípios de execução
 
@@ -28,6 +28,9 @@
 - dados de bancada aplicáveis têm prioridade sobre previsões teóricas;
 - modelo teórico de propulsão só produz resultado quando houver parâmetros suficientes e sempre informa modelo, hipóteses, proveniência e confiança;
 - nunca inferir empuxo real apenas de `KV + diâmetro da hélice + tensão`;
+- `gf/W` deve ser tratado como eficiência estática de empuxo, nunca como eficiência percentual;
+- `pitch × RPM` produz apenas velocidade teórica de passo e nunca deve ser apresentado como velocidade real/máxima do drone;
+- gráficos técnicos não devem misturar grandezas de unidades incompatíveis numa única escala Y por padrão;
 - cada etapa atualiza documentação e ADR quando alterar contrato ou arquitetura;
 - manter o projeto executável ao final de cada etapa.
 
@@ -49,6 +52,7 @@ Entregas:
 - estratégia de testes e release gates;
 - ingestão assistida por URL/imagens;
 - scraping controlado de fabricantes em `docs/MANUFACTURER_SCRAPING.md`;
+- workspace de dados de bancada em `docs/BENCH_DATA_WORKSPACE.md`;
 - roadmap e prompts de implementação.
 
 Critério: documentos superiores não se contradizem e qualquer IA implementadora consegue identificar a fonte normativa de cada decisão.
@@ -402,46 +406,134 @@ Critério da fase: IA sugere dados textuais/visuais estruturados com evidência;
 
 ---
 
-# FASE 7 — Bench data, propulsão e Physics Engine
+# FASE 7 — Bench data, Workspace Bancada, propulsão e Physics Engine
+
+**Especificações obrigatórias:** `docs/BENCH_DATA_WORKSPACE.md` e `docs/PHYSICS_ENGINE.md`.
 
 Esta fase possui duas rotas complementares. A rota empírica baseada em bancada é preferida quando existe ensaio aplicável. A rota teórica só é usada quando há parâmetros suficientes e nunca deve fabricar coeficientes ou precisão.
 
-## Etapa 7A — Curvas de bancada
+## Etapa 7A — Contratos e curvas de bancada
 
 - motor + variante;
-- hélice + variante;
-- tensão/células;
+- hélice + variante ou descrição estruturada;
+- diâmetro/pitch/número de pás quando conhecidos;
+- tensão/células/condições;
+- ESC quando conhecido;
 - throttle;
 - empuxo;
 - corrente;
-- potência;
-- RPM/eficiência opcionais;
-- proveniência e condições.
+- tensão por amostra preferencialmente medida;
+- potência medida ou derivável;
+- RPM;
+- eficiência estática `gf/W` medida ou derivável;
+- proveniência e status de revisão.
 
-## Etapa 7B — Importação de bench data
+Regras:
+
+- `throttle %` não é aceleração física;
+- empuxo/unidade ambígua exige revisão;
+- tensão ausente não vira tensão nominal silenciosamente;
+- valores derivados não substituem a fonte original.
+
+## Etapa 7B — Workspace Bancada UI
+
+Criar a seção principal **Bancada** da aplicação.
+
+Entregas:
+
+- listagem/busca de ensaios;
+- detalhe do ensaio motor+hélíce+condições;
+- criação/edição de amostras;
+- tabela com unidades explícitas;
+- proveniência/status por dado;
+- acesso pelo Catálogo e pela Análise;
+- `Como foi calculado?` para valores derivados;
+- layout NEXO e acessibilidade;
+- gráficos técnicos separados por unidade/grandeza.
+
+Gráficos padrão:
+
+```text
+Empuxo × throttle
+Corrente/Potência × throttle
+RPM × throttle
+Eficiência estática (gf/W) × throttle ou empuxo
+```
+
+Não usar uma única escala Y para A, gf, RPM e `gf/W` como se fossem grandezas comparáveis.
+
+## Etapa 7C — Importação de bench data
 
 - CSV/tabela;
+- preview antes de persistir;
+- mapeamento de cabeçalhos;
 - schema estrito;
-- unidades;
-- validação de monotonicidade quando aplicável;
+- unidade obrigatória/confirmada quando ambígua;
+- suporte a vírgula/ponto decimal conforme contratos do projeto;
+- preservação do valor bruto;
 - duplicatas/conflitos;
+- rollback/atomicidade quando persistência final falhar;
 - nenhuma extrapolação silenciosa.
 
-## Etapa 7C — Interpolação
+Dados vindos de scraping, PDF ou imagem seguem staging/revisão das Fases 5 e 6.
 
-- interpolação apenas dentro da faixa medida;
+## Etapa 7D — Métricas derivadas e validação de consistência
+
+Implementar no calculation engine, não na UI:
+
+### Potência elétrica
+
+```text
+P = V × I
+```
+
+### Eficiência estática de empuxo
+
+```text
+static_thrust_efficiency_gf_per_W = thrust_gf / power_W
+```
+
+Não interpretar como eficiência percentual.
+
+### Velocidade teórica de passo
+
+```text
+pitch_m = pitch_in × 0.0254
+pitch_speed_km_h = pitch_m × RPM × 60 / 1000
+```
+
+Nome obrigatório: **Velocidade teórica de passo**.
+
+Deve carregar aviso de que não representa velocidade real/máxima da aeronave e ignora slip, arrasto, advance ratio e outros efeitos aerodinâmicos.
+
+### Checks
+
+Incluir warnings equivalentes a:
+
+```text
+BENCH_VOLTAGE_MISSING
+BENCH_POWER_INCONSISTENT
+BENCH_EFFICIENCY_UNIT_AMBIGUOUS
+BENCH_THRUST_UNIT_AMBIGUOUS
+BENCH_RPM_EXCEEDS_NO_LOAD_REFERENCE
+BENCH_SAMPLE_DUPLICATE
+BENCH_SAMPLE_INVALID
+PITCH_SPEED_NOT_AIRCRAFT_SPEED
+```
+
+## Etapa 7E — Interpolação e propulsão medida
+
+- interpolação apenas dentro da faixa medida/aprovada;
 - fora da faixa → unavailable/warning;
 - método/versionamento;
-- testes de fronteira.
-
-## Etapa 7D — Propulsão medida
-
-- thrust/current/power no ponto solicitado;
+- testes de fronteira;
+- thrust/current/power/RPM no ponto solicitado quando disponíveis;
 - hover current por motor;
-- eficiência g/W;
-- total do sistema.
+- eficiência `gf/W`;
+- total do sistema;
+- lookup preferencial por empuxo requerido para hover, não linearidade presumida de throttle.
 
-## Etapa 7E — Contratos do Physics Engine
+## Etapa 7F — Contratos do Physics Engine
 
 - parâmetros de bateria;
 - parâmetros de ESC/drive;
@@ -450,7 +542,7 @@ Esta fase possui duas rotas complementares. A rota empírica baseada em bancada 
 - atmosfera;
 - operating point/result/provenance.
 
-## Etapa 7F — Bateria sob carga
+## Etapa 7G — Bateria sob carga
 
 - OCV/SOC quando houver modelo;
 - resistência interna;
@@ -458,7 +550,7 @@ Esta fase possui duas rotas complementares. A rota empírica baseada em bancada 
 - limites por química;
 - temperatura apenas quando houver modelo/dados suficientes.
 
-## Etapa 7G — Motor eletromecânico e torque
+## Etapa 7H — Motor eletromecânico e torque
 
 - KV;
 - conversão cuidadosa para Ke/Kt em SI;
@@ -470,7 +562,7 @@ Esta fase possui duas rotas complementares. A rota empírica baseada em bancada 
 - eficiência;
 - limites e hipóteses.
 
-## Etapa 7H — Hélice aerodinâmica
+## Etapa 7I — Hélice aerodinâmica
 
 Quando houver coeficientes/dados suficientes:
 
@@ -483,7 +575,7 @@ Quando houver coeficientes/dados suficientes:
 
 Sem coeficientes ou curva aplicável, não fabricar resultado de alta confiança.
 
-## Etapa 7I — Solver do ponto de operação
+## Etapa 7J — Solver do ponto de operação
 
 Resolver numericamente o equilíbrio aproximado:
 
@@ -501,13 +593,15 @@ Entregas:
 - sem solução silenciosamente fora do envelope;
 - resultado com RPM, corrente, torque, thrust, potência e eficiência quando calculáveis.
 
-## Etapa 7J — Validação contra bancada
+## Etapa 7K — Validação contra bancada
 
 - comparar modelo teórico com ensaios reais;
 - erro absoluto/relativo;
 - tolerâncias documentadas;
 - calibrar/limitar confiança;
 - modelo que diverge além do gate não pode ser apresentado como alta confiança.
+
+Critério de saída da Fase 7: o usuário consegue cadastrar/importar/revisar uma curva na seção Bancada, visualizar grandezas corretamente, usar dados aprovados para análise sem extrapolação silenciosa e comparar futuramente o modelo físico contra bancada real.
 
 ---
 
@@ -649,7 +743,39 @@ Toda etapa deve passar por:
 7. documentação atualizada;
 8. nenhum segredo no repositório.
 
-Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/tamanho/prompt injection conforme a etapa. Para Physics Engine, adicionar fixtures e comparação com dados reais quando disponíveis.
+Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/tamanho/prompt injection conforme a etapa. Para dados de bancada, adicionar testes de unidade, potência, `gf/W`, pitch speed, importação e ausência de extrapolação. Para Physics Engine, adicionar fixtures e comparação com dados reais quando disponíveis.
+
+---
+
+# Dependências principais
+
+```text
+1A Bootstrap workspace
+ ├─ 1B NEXO
+ ├─ 1C Docker services
+ └─ 1D Units/contracts
+       ↓
+2 Domain/PostgreSQL/Object Storage
+       ↓
+3 Basic Calculation Engine
+       ↓
+4 Catalog
+ ├──────────────┐
+ ↓              ↓
+5 URL/Scraping  7A Bench contracts
+ ↓              ↓
+6 Ollama        7B–7E Bancada/Measured Propulsion
+ └───────┐      │
+         └──────┤
+                ↓
+          7F–7K Physics Engine
+                ↓
+8 Profiles/Heuristics/Candidate Generator
+                ↓
+9 Builder/Analysis
+                ↓
+10–12 Comparison/Reports/Optimizer
+```
 
 ---
 
@@ -657,10 +783,14 @@ Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/t
 
 **Etapa 1A — Bootstrap full-stack e workspace.**
 
-Não antecipar PostgreSQL, MinIO, Ollama, scraping ou Physics Engine para essa etapa. O objetivo é criar a fundação que permitirá implementar esses subsistemas sem acoplamento prematuro.
+Não antecipar PostgreSQL, MinIO, Ollama, scraping, Workspace Bancada ou Physics Engine para essa etapa. O objetivo é criar a fundação que permitirá implementar esses subsistemas sem acoplamento prematuro.
 
 A orientação executável está em:
 
 `docs/prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`
+
+A implementação futura da seção Bancada deve seguir:
+
+`docs/prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md`
 
 A IA implementadora pode propor estrutura alternativa mais eficaz/eficiente desde que preserve os requisitos, justifique trade-offs, implemente testes e atualize a documentação quando necessário.
