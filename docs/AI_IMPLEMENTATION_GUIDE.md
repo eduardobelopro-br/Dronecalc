@@ -1,54 +1,75 @@
 # Guia para Implementação Assistida por IA — DroneCalc
 
-**Versão:** 0.1
+**Versão:** 0.2
 
 ## 1. Objetivo
 
 Este documento é o contrato operacional para qualquer agente de IA utilizado para implementar, revisar ou refatorar o DroneCalc.
 
-A IA **pode propor e aplicar uma solução mais eficiente** do que a sugerida na documentação quando houver benefício técnico claro, desde que preserve os requisitos do produto, explique a mudança, mantenha compatibilidade ou migração adequada e atualize os documentos afetados.
+A IA **pode propor e aplicar uma solução mais eficiente** do que a sugerida na documentação quando houver benefício técnico claro, desde que preserve os requisitos do produto, explique a mudança, mantenha compatibilidade/migração adequada, teste a alternativa e atualize os documentos afetados.
 
 ## 2. Ordem obrigatória de leitura
 
 Antes de alterar código relevante, ler:
 
 1. `README.md`;
-2. `docs/PRD.md`;
-3. `docs/PRODUCT_SPEC.md`;
-4. `docs/ARCHITECTURE.md`;
-5. documento específico da área alterada;
-6. `docs/TEST_STRATEGY.md`;
-7. `docs/DEVELOPMENT.md`.
+2. `docs/README.md`;
+3. `docs/PRD.md`;
+4. `docs/PRODUCT_SPEC.md`;
+5. `docs/ARCHITECTURE.md`;
+6. `docs/ROADMAP.md`;
+7. documento específico da área;
+8. `docs/TEST_STRATEGY.md`;
+9. `docs/DEVELOPMENT.md`;
+10. ADRs aplicáveis.
 
-Mudanças visuais exigem também `docs/NEXO_DESIGN_SYSTEM.md` e `docs/UX_SPEC.md`.
+Mudanças visuais exigem `docs/NEXO_DESIGN_SYSTEM.md` e `docs/UX_SPEC.md`.
 
 Mudanças matemáticas exigem `docs/CALCULATION_ENGINE.md`.
 
-## 3. Regras inegociáveis
+Mudanças de persistência/infraestrutura exigem considerar `docs/adr/0002-postgresql-object-storage-ollama.md`.
+
+## 3. Arquitetura vigente resumida
+
+- Web: React + TypeScript + Vite;
+- API: Node.js + TypeScript;
+- PostgreSQL: fonte principal de dados persistidos;
+- MinIO/S3-compatible: imagens/documentos;
+- Ollama: primeiro provider de IA local, atrás de interface substituível;
+- IndexedDB: cache/drafts/preferências/offline auxiliar;
+- domínio e calculation engine independentes de UI, banco e IA.
+
+## 4. Regras inegociáveis
 
 A IA não deve:
 
 - colocar fórmulas de engenharia dentro de componentes React;
-- inventar dados técnicos ausentes para produzir resultado;
+- inventar dados técnicos ausentes;
 - tratar `undefined` como zero;
 - apresentar estimativa como medição;
-- extrapolar curvas de bancada silenciosamente;
-- hardcodar cores nas features em vez de tokens NEXO;
-- introduzir backend sem necessidade da etapa;
-- alterar schemas persistidos sem migração/versionamento;
-- remover testes apenas para fazer CI passar;
-- trocar arquitetura inteira sem justificativa e documentação;
-- afirmar que uma combinação é segura quando apenas foi calculada como compatível segundo os dados.
+- extrapolar curvas silenciosamente;
+- hardcodar cores de features em vez de tokens NEXO;
+- acessar PostgreSQL diretamente a partir do domínio;
+- acoplar domínio/calculation engine a Ollama;
+- armazenar imagens grandes no PostgreSQL por padrão;
+- publicar dados extraídos por IA sem schema/staging/revisão;
+- criar fetch por URL sem proteção anti-SSRF;
+- alterar schemas persistidos sem migration/versionamento;
+- remover testes para fazer CI passar;
+- introduzir secrets no repositório;
+- afirmar que uma configuração é segura apenas porque passou em cálculos de compatibilidade.
 
-## 4. Liberdade para melhorar a solução
+## 5. Liberdade para melhorar a solução
 
-A IA está autorizada a melhorar:
+A IA pode melhorar:
 
-- estrutura de pastas;
+- estrutura de pastas/workspaces;
 - nomes de tipos/funções;
 - algoritmos;
 - estratégia de units;
 - abstrações de repository;
+- framework HTTP;
+- ORM/query builder/migration tool;
 - composição de componentes;
 - performance;
 - estratégia de testes;
@@ -58,47 +79,53 @@ se a melhoria:
 
 1. reduz complexidade ou aumenta correção/manutenibilidade;
 2. não viola PRD/specs;
-3. não reduz transparência dos cálculos;
-4. possui testes;
-5. é explicada no relatório da etapa;
-6. atualiza arquitetura/ADR se estrutural.
+3. preserva fronteiras arquiteturais;
+4. não reduz transparência dos cálculos;
+5. usa APIs reais verificadas em documentação oficial;
+6. possui testes;
+7. é explicada no relatório da etapa;
+8. atualiza arquitetura/ADR quando estrutural.
 
-## 5. Regra para divergência da documentação
+## 6. Regra para divergência da documentação
 
-Se a IA identificar uma abordagem melhor:
+Se a IA identificar abordagem melhor:
 
 ```text
-1. identificar a limitação atual;
-2. explicar a alternativa;
-3. verificar impacto nos requisitos;
-4. implementar a alternativa se segura e dentro do escopo;
-5. atualizar documentação;
-6. registrar testes e riscos residuais.
+identificar limitação
+→ explicar alternativa
+→ comparar trade-offs
+→ verificar requisitos
+→ implementar se segura e dentro do escopo
+→ testar
+→ atualizar documentação
+→ registrar riscos residuais
 ```
 
-Não manter documentação sabidamente desatualizada apenas para “seguir o plano”.
+Não manter documentação sabidamente desatualizada apenas para seguir um plano antigo.
 
-## 6. Fluxo de trabalho por etapa
+## 7. Fluxo de trabalho por etapa
 
 ### Antes
 
 - verificar branch/status;
-- ler documentos relevantes;
+- ler docs/ADRs relevantes;
 - inspecionar código atual;
 - identificar dependências da etapa;
-- não repetir implementação já existente.
+- não repetir implementação existente;
+- apresentar plano curto antes de mudança grande.
 
 ### Durante
 
-- fazer mudanças coesas;
-- manter build utilizável;
-- adicionar testes junto da implementação;
-- evitar escopo lateral não necessário;
-- preservar compatibilidade de dados.
+- mudanças coesas;
+- build utilizável;
+- testes junto da implementação;
+- escopo lateral mínimo;
+- compatibilidade de dados;
+- segurança por padrão.
 
 ### Depois
 
-Executar, quando disponíveis:
+Executar comandos reais equivalentes a:
 
 ```bash
 npm run typecheck
@@ -107,55 +134,55 @@ npm run test
 npm run build
 ```
 
-Registrar resultados reais. Não afirmar que testes passaram se não foram executados.
+Registrar resultados reais. Nunca afirmar que teste/comando passou sem execução.
 
-## 7. Relatório obrigatório da etapa
+## 8. Relatório obrigatório
 
-Cada etapa relevante deve gerar/atualizar relatório contendo:
+Cada etapa relevante gera relatório em `docs/reports/` contendo:
 
 ```text
 # Relatório — Etapa X
 
 ## Objetivo
-## Estado anterior
+## Estado encontrado
+## Plano executado
 ## Implementado
 ## Arquivos alterados
 ## Decisões técnicas
-## Melhorias em relação ao plano original
-## Testes executados
+## Melhorias sobre o plano original
+## Dependências adicionadas
+## Testes/comandos executados
 ## Resultados
+## Auto-auditoria
 ## Pendências
 ## Riscos
 ## Próximo passo recomendado
 ```
 
-Relatórios temporários podem ficar em `docs/reports/` se o projeto adotar essa prática.
-
-## 8. Alteração matemática
+## 9. Alteração matemática
 
 Ao criar/mudar fórmula:
 
 - nomear formula/model version;
-- indicar unidades das entradas e saída;
+- declarar unidades;
 - documentar hipótese;
 - criar caso de referência;
 - testar limites;
 - atualizar `CALCULATION_ENGINE.md`;
-- indicar se resultados existentes podem mudar.
+- indicar impacto em resultados existentes.
 
-## 9. Alteração de perfis
+## 10. Alteração de perfis/heurísticas
 
-Ao mudar pesos/targets:
+Ao mudar pesos/targets/regras:
 
-- versionar perfil;
-- testar score;
+- versionar;
+- testar score/candidate generation;
 - validar que `danger` não é mascarado;
-- atualizar `FLIGHT_PROFILES.md`;
-- explicar impacto em rankings.
+- separar heurística de compatibilidade;
+- atualizar `FLIGHT_PROFILES.md`/docs de knowledge;
+- explicar impacto em ranking/recomendação.
 
-## 10. Alteração visual
-
-Ao criar tela/componente:
+## 11. Alteração visual
 
 - reutilizar NEXO primitives/tokens;
 - suportar claro/escuro/sistema;
@@ -164,94 +191,97 @@ Ao criar tela/componente:
 - manter unidades visíveis;
 - implementar estados vazio/erro/incompleto.
 
-## 11. Persistência
+## 12. Persistência e infraestrutura
 
 Ao mudar dados:
 
 - schema explícito;
-- migration se necessário;
-- round-trip test;
-- import inválido não persiste parcialmente;
-- export continua autocontido quando aplicável.
+- migration;
+- testes de integração;
+- transaction boundaries;
+- import inválido não persiste parcialmente.
 
-## 12. Prompt-base para uma etapa
+Ao lidar com arquivos:
 
-Usar como template:
+- guardar binário em object storage;
+- metadados no PostgreSQL;
+- validar MIME/tamanho;
+- considerar hash/deduplicação.
+
+## 13. Ingestão por URL
+
+Obrigatório considerar:
+
+- somente HTTP/HTTPS;
+- loopback/private/link-local bloqueados;
+- redirects revalidados;
+- timeout;
+- limite de bytes;
+- tipos de conteúdo permitidos;
+- sanitização da apresentação;
+- nenhum cookie/token pessoal reaproveitado;
+- logs sem credenciais.
+
+## 14. Ollama/IA
+
+- adapter atrás de `AiProvider` ou abstração equivalente;
+- modelo configurável;
+- saída estruturada validada;
+- timeout/cancelamento;
+- prompt/model/version rastreáveis;
+- falha da IA não corrompe persistência;
+- IA sugere e extrai, não vira autoridade técnica automaticamente.
+
+## 15. Prompt-base para uma etapa
 
 ```text
 Você está implementando uma etapa do projeto DroneCalc.
 
 Repositório: eduardobelopro-br/Dronecalc
 
-Leia primeiro README.md e a documentação em docs/, priorizando PRD.md,
-PRODUCT_SPEC.md, ARCHITECTURE.md, DEVELOPMENT.md e os documentos específicos
-da etapa.
+Leia README.md, docs/README.md, PRD, Product Spec, Architecture, Roadmap,
+Development, Test Strategy e os ADRs/documentos específicos da etapa.
 
-Implemente a etapa solicitada de forma completa, coesa e testável.
+Inspecione o código real antes de propor mudanças.
 
-Regras:
-- o motor matemático deve permanecer independente de React;
+Implemente a etapa de forma completa, coesa, segura e testável.
+
+Regras principais:
+- domínio e calculation engine independentes de React, PostgreSQL e Ollama;
+- PostgreSQL acessado por adapters/repositories;
+- imagens/documentos em object storage, não como blobs grandes no banco por padrão;
 - não invente dados técnicos ausentes;
-- todo resultado físico deve ter unidade;
-- resultados devem preservar origem e confiança;
-- não extrapole curvas de bancada silenciosamente;
-- UI deve seguir o NEXO Design System e usar tokens --nexo-*;
+- resultados físicos preservam unidade, origem e confiança;
+- não extrapole curvas silenciosamente;
+- UI segue NEXO Design System;
+- ingestão por URL deve ser segura contra SSRF e payloads abusivos;
+- saída de IA passa por schema/staging/revisão;
 - adicione/atualize testes;
-- execute typecheck, lint, test e build quando os scripts existirem;
-- não remova testes para fazer a implementação passar;
-- atualize documentação quando mudar contratos.
+- execute typecheck, lint, test e build quando aplicáveis;
+- não remova testes para obter CI verde;
+- não versione secrets;
+- atualize documentação quando mudar contrato/arquitetura.
 
-Você tem liberdade para substituir a solução sugerida por uma abordagem mais
-eficiente, simples ou robusta se identificar uma melhoria clara. Nesse caso,
-explique o motivo, preserve os requisitos, teste a alternativa e atualize os
-documentos afetados.
+Você tem liberdade explícita para substituir a solução sugerida por uma abordagem
+mais eficiente, simples, segura ou robusta. Se fizer isso, explique o motivo,
+compare trade-offs, preserve requisitos, verifique documentação oficial,
+teste a alternativa e atualize docs/ADR quando necessário.
 
-Ao final, gere um relatório com o que foi implementado, decisões, testes,
-pendências e o próximo passo recomendado.
+Ao final, gere relatório com implementação, decisões, testes, auto-auditoria,
+riscos, pendências e próximo passo recomendado.
 ```
 
-## 13. Prompt específico — próxima etapa 1A
+## 16. Próxima etapa — orientação oficial
 
-```text
-Implemente a Etapa 1A — Bootstrap do DroneCalc conforme docs/ROADMAP.md.
+A orientação executável atual para a primeira implementação está em:
 
-Objetivos:
-- inicializar React + TypeScript + Vite;
-- TypeScript strict;
-- configurar lint/format de forma simples;
-- configurar Vitest;
-- criar a estrutura arquitetural mínima de diretórios;
-- criar scripts dev/build/test/typecheck/lint;
-- garantir que build e teste inicial funcionem;
-- não implementar ainda fórmulas de drone além de scaffolding estritamente necessário;
-- não criar backend.
+`docs/prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`
 
-Preserve README.md e docs/ existentes.
+Ela substitui o antigo prompt de 1A que tratava o DroneCalc como frontend-only.
 
-Se a stack/documentação sugerir uma dependência desnecessária nesta etapa,
-você pode adiar sua instalação, desde que explique a decisão e não bloqueie as
-etapas seguintes.
+O escopo da Etapa 1A é **bootstrap de workspace + Web + API + packages puros**, sem ainda implementar PostgreSQL, MinIO ou Ollama. Esses serviços entram na Etapa 1C, depois da base e do NEXO Design System.
 
-Ao final, gere docs/reports/RELATORIO_ETAPA_1A_BOOTSTRAP.md com comandos
-executados, resultados e próximo passo.
-```
-
-## 14. Prompt específico — Etapa 1B
-
-```text
-Implemente a Etapa 1B — base visual NEXO.
-
-Use docs/NEXO_DESIGN_SYSTEM.md como especificação e o repositório NEXO apenas
-como referência da fonte visual. Mantenha uma cópia própria dos tokens no
-DroneCalc; não crie dependência runtime entre repositórios.
-
-Implemente theme system/light/dark e os primitives mínimos definidos no roadmap.
-Nenhuma feature deve usar cores hardcoded.
-
-Registre a revisão/origem dos tokens sincronizados e teste os principais estados.
-```
-
-## 15. Revisão por IA
+## 17. Revisão por IA
 
 Uma IA revisora deve procurar explicitamente:
 
@@ -259,15 +289,22 @@ Uma IA revisora deve procurar explicitamente:
 - arredondamento prematuro;
 - confusão massa × força;
 - tensão nominal usada onde deveria ser tensão cheia;
-- C-rating tratado como corrente medida;
+- C-rating tratado como medição;
 - extrapolação;
 - `undefined → 0`;
 - score ocultando incompatibilidade;
-- fórmula duplicada na UI;
+- heurística tratada como compatibilidade;
+- fórmula duplicada na UI/API;
 - cores não-NEXO;
 - migration ausente;
+- SQL/ORM vazando para domínio;
+- Ollama vazando para domínio;
+- blobs grandes no PostgreSQL;
+- SSRF no importador de URL;
+- trust indevido em saída de IA;
+- segredos/configuração insegura;
 - falta de teste de limite.
 
-## 16. Critério de qualidade
+## 18. Critério de qualidade
 
-O objetivo não é apenas “fazer funcionar”. O código deve deixar claro **o que sabemos, o que calculamos e o que apenas estimamos**.
+O objetivo não é apenas fazer funcionar. O código deve deixar claro **o que sabemos, o que calculamos, o que extraímos, o que inferimos e o que apenas estimamos**.
