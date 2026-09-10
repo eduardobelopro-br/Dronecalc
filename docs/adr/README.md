@@ -39,4 +39,5 @@ Data: YYYY-MM-DD
 
 ## Índice
 
-- [`0001-web-first-core-engine.md`](0001-web-first-core-engine.md) — arquitetura Web-first com motor independente de UI e backend opcional futuro.
+- [`0001-web-first-core-engine.md`](0001-web-first-core-engine.md) — Web-first e motor de cálculo independente. Continua válido nesses princípios; a estratégia de persistência/backend foi parcialmente substituída pelo ADR 0002.
+- [`0002-postgresql-object-storage-ollama.md`](0002-postgresql-object-storage-ollama.md) — PostgreSQL como fonte principal, object storage para arquivos e Ollama atrás de interface substituível no MVP ampliado.
