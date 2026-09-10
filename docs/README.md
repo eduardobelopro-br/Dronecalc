@@ -78,7 +78,7 @@ Mudanças que alterem uma regra superior devem atualizar os documentos dependent
 
 ## Estado da especificação
 
-Versão da arquitetura/roadmap: **0.3**  
+Versão da arquitetura/roadmap: **0.4**  
 Status: **planejamento / pré-MVP**
 
 A documentação deve evoluir junto com o código. Não manter decisões relevantes apenas em issues, chats ou prompts temporários.
