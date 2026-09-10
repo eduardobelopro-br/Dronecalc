@@ -1,12 +1,14 @@
 # Ingestão Assistida de Componentes — URL, Imagens e IA
 
-**Versão:** 0.1  
+**Versão:** 0.2  
 **Status:** especificação para implementação futura  
 **Escopo:** cadastro assistido de equipamentos a partir de páginas, imagens e documentos técnicos.
 
 ## 1. Objetivo
 
 O DroneCalc deve permitir que o usuário informe a URL da página de um equipamento e receba um cadastro técnico pré-preenchido. O sistema deve extrair dados não apenas do HTML/texto, mas também das imagens técnicas encontradas na página, incluindo fichas de especificação, tabelas, desenhos dimensionais, etiquetas e gráficos.
+
+Quando a URL for de um fabricante, a coleta deve seguir também `MANUFACTURER_SCRAPING.md`: o scraper/fetcher coleta o conteúdo público de forma controlada, parsers determinísticos extraem primeiro o que já estiver estruturado e a IA interpreta apenas o que exigir entendimento textual/visual adicional.
 
 A IA pode extrair e estruturar dados, porém não é autoridade técnica. Todo dado remoto é não confiável até validação e todo dado extraído por IA entra primeiro em **staging** no PostgreSQL. Publicação no catálogo exige o workflow de revisão definido neste documento.
 
@@ -22,6 +24,8 @@ A IA pode extrair e estruturar dados, porém não é autoridade técnica. Todo d
 8. A IA não grava diretamente nas tabelas publicadas/autoritativas do catálogo.
 9. Ausência de dado permanece ausência de dado; a IA não inventa defaults.
 10. Gráficos digitalizados por visão computacional/IA não recebem automaticamente status de medição de alta confiança.
+11. O scraper controla rede e coleta; a IA não decide destinos de rede nem navega livremente.
+12. Para páginas de fabricantes, HTTP/parsing estático é preferido; browser headless é fallback isolado e só deve ser introduzido quando houver necessidade demonstrada.
 
 ## 3. Pipeline canônico
 
@@ -75,7 +79,7 @@ SOURCE INGESTION SEGURO
 
 ## 4. Source ingestion
 
-A ingestão por URL segue os controles de segurança do roadmap:
+A ingestão por URL segue os controles de segurança do roadmap e de `MANUFACTURER_SCRAPING.md`:
 
 - HTTP/HTTPS apenas;
 - bloqueio de loopback, link-local, redes privadas e destinos internos;
@@ -85,7 +89,8 @@ A ingestão por URL segue os controles de segurança do roadmap:
 - nenhuma execução arbitrária de JavaScript remoto no backend;
 - não reutilizar cookies/tokens do usuário para scraping;
 - logs sem segredos;
-- sanitização antes de renderizar conteúdo remoto.
+- sanitização antes de renderizar conteúdo remoto;
+- sem mecanismos destinados a burlar CAPTCHA, autenticação, paywall ou controles de acesso.
 
 Conteúdo remoto deve ser tratado como input hostil, inclusive texto que tente instruir o agente de IA.
 
@@ -101,6 +106,8 @@ Antes de IA, tentar obter dados de:
 6. texto normalizado.
 
 Cada extractor retorna candidatos, não escreve diretamente no catálogo.
+
+Em páginas oficiais, também descobrir links públicos para datasheets, manuais, tabelas de empuxo e outros assets associados ao produto. O objetivo é importar a página/produto solicitado, não fazer crawling indiscriminado do site.
 
 ## 6. Descoberta e armazenamento de imagens
 
@@ -316,6 +323,8 @@ A reconciliação deve considerar:
 
 Valores aparentemente contraditórios podem ser válidos sob condições distintas; portanto o sistema deve preservar contexto antes de classificar como erro.
 
+Para prioridade e política específica de páginas oficiais de fabricantes, consultar `MANUFACTURER_SCRAPING.md`. Autoridade da fonte nunca elimina a necessidade de consistência e revisão.
+
 ## 14. Validações cruzadas de consistência
 
 Além de schema, o importador pode gerar warnings determinísticos sem alterar os valores originais.
@@ -403,6 +412,8 @@ Não é obrigatório usar esses nomes literalmente.
 
 PostgreSQL armazena estrutura, estado, proveniência e relações. MinIO/S3-compatible armazena imagens/documentos.
 
+Para fontes de fabricante, snapshots sucessivos devem permitir detectar mudança da página sem sobrescrever silenciosamente uma revisão aprovada.
+
 ## 19. Segurança específica de IA
 
 Conteúdo de página, imagem, alt-text, PDF ou documento é **dados**, não instrução confiável para o agente.
@@ -446,8 +457,9 @@ Falhas parciais não devem transformar dados incompletos em sucesso silencioso.
 A funcionalidade de ingestão multimodal só pode ser considerada concluída quando:
 
 - uma URL válida pode iniciar um import job sem acesso a rede interna;
+- uma página oficial de fabricante pode ser processada por scraping/fetch controlado;
 - HTML estruturado é extraído sem IA quando possível;
-- imagens técnicas candidatas podem ser armazenadas com hash e proveniência;
+- imagens técnicas e PDFs/datasheets candidatos podem ser descobertos/armazenados com hash e proveniência;
 - um provider visual compatível consegue produzir candidatos estruturados validados por schema;
 - modelo sem capacidade visual falha explicitamente;
 - cada campo de IA possui evidência e método de extração;
@@ -458,36 +470,42 @@ A funcionalidade de ingestão multimodal só pode ser considerada concluída qua
 - valores derivados não são confundidos com valores declarados;
 - imagem/documento não é armazenado como blob grande no PostgreSQL;
 - falha de IA ou de um asset não corrompe o catálogo;
-- testes cobrem SSRF, MIME/tamanho, schema inválido, conflito de fonte e fluxo de revisão.
+- mudança posterior na página do fabricante não sobrescreve silenciosamente uma revisão publicada;
+- testes cobrem SSRF, MIME/tamanho, schema inválido, conflito de fonte e fluxo de revisão;
+- o sistema não depende de burlar CAPTCHA, autenticação ou paywall.
 
 ## 23. Relação com o roadmap
 
-Este documento detalha as **Fases 5 e 6** do `ROADMAP.md`.
+Este documento detalha as **Fases 5 e 6** do `ROADMAP.md`, em conjunto com `MANUFACTURER_SCRAPING.md` para páginas oficiais.
 
 A implementação deve ocorrer incrementalmente:
 
 1. source ingestion seguro;
-2. extração determinística;
-3. descoberta/armazenamento seguro de assets;
-4. contrato de AI Provider;
-5. provider Ollama;
-6. capability multimodal/vision;
-7. extração de imagem para schema;
-8. normalização e evidência por campo;
-9. reconciliação cross-source;
-10. review/publish.
+2. scraping HTTP/parsing estático de fabricante;
+3. extração determinística;
+4. descoberta/armazenamento seguro de assets e documentos;
+5. staging/snapshots/evidência;
+6. contrato de AI Provider;
+7. provider Ollama;
+8. capability multimodal/vision;
+9. extração de imagem para schema;
+10. normalização e evidência por campo;
+11. reconciliação cross-source;
+12. review/publish;
+13. browser headless somente como fallback futuro quando necessário.
 
-Não é necessário implementar visão na primeira etapa de scraping. Segurança de fetch, staging e contratos devem existir antes da automação multimodal.
+Não é necessário implementar visão ou browser headless na primeira etapa de scraping. Segurança de fetch, staging e contratos devem existir antes da automação multimodal.
 
 ## 24. Regra para melhorias propostas por IA
 
-A IA implementadora pode modificar contratos, estrutura de tabelas, estratégia de extração, provider ou ordem interna se encontrar abordagem mais eficaz, eficiente, segura ou testável, desde que:
+A IA implementadora pode modificar contratos, estrutura de tabelas, estratégia de scraping/extração, provider ou ordem interna se encontrar abordagem mais eficaz, eficiente, segura ou testável, desde que:
 
 1. preserve staging e revisão antes de publicação;
 2. preserve evidência por campo e separação entre extraído/derivado;
 3. não enfraqueça controles anti-SSRF/prompt injection;
 4. mantenha domínio desacoplado do Ollama;
-5. valide saída por schema;
-6. explique trade-offs;
-7. adicione testes equivalentes ou melhores;
-8. atualize documentação/ADR quando a decisão for estrutural.
+5. mantenha scraper/fetcher responsável por rede, sem delegar navegação arbitrária ao modelo;
+6. valide saída por schema;
+7. explique trade-offs;
+8. adicione testes equivalentes ou melhores;
+9. atualize documentação/ADR quando a decisão for estrutural.
