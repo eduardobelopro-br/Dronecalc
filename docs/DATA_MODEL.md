@@ -1,10 +1,12 @@
 # Modelo de Dados e Persistência — DroneCalc
 
-**Versão:** 0.2
+**Versão:** 0.3
 
 ## 1. Objetivo
 
 Definir como projetos, componentes, evidências, imports, perfis e testes de bancada são persistidos, importados, exportados e migrados sem acoplar o domínio a uma tecnologia concreta.
+
+A ingestão detalhada de páginas, imagens e documentos é especificada em `ASSISTED_INGESTION.md`.
 
 ## 2. Estratégia vigente
 
@@ -16,7 +18,9 @@ O MVP ampliado adota:
 - IndexedDB apenas para cache, drafts, preferências e suporte offline auxiliar;
 - JSON versionado para export/import;
 - CSV para importação de tabelas de bancada;
-- staging obrigatório para dados extraídos por URL/IA.
+- staging obrigatório para dados extraídos por URL/IA;
+- evidência por campo para dados extraídos de HTML, imagens ou documentos;
+- separação explícita entre valor declarado/extraído e valor derivado pelo calculation/physics engine.
 
 Essa decisão substitui a estratégia inicial de IndexedDB como armazenamento principal e está registrada no ADR 0002.
 
@@ -29,12 +33,16 @@ O modelo físico será detalhado nas migrations, mas deve cobrir ao menos:
 - `components`;
 - `manufacturers`;
 - `component_variants` quando necessário;
+- `component_revisions` ou mecanismo equivalente de revisão;
 - `bench_tests`;
 - `bench_test_samples`;
 - `flight_profiles`/versões quando persistidos;
 - `evidence_sources`;
-- `imports`;
+- `imports`/`import_jobs`;
+- `extraction_runs` quando necessário;
 - `extracted_fields`/staging;
+- `field_evidence` ou relação equivalente;
+- `source_conflicts`/decisões de revisão quando necessário;
 - `stored_objects` ou metadados equivalentes de mídia;
 - `heuristics` e revisões futuras;
 - metadata de migrations/versionamento.
@@ -119,6 +127,8 @@ interface StoredObjectMetadata {
 
 MinIO é a implementação local inicial. O contrato deve permitir storage S3-compatible futuro.
 
+Assets provenientes de páginas externas devem manter ligação com o import job/evidência e passar por validação de destino, MIME, tamanho e hash conforme `ASSISTED_INGESTION.md`.
+
 ## 8. Fontes e evidências
 
 Toda informação técnica importada deve poder indicar origem.
@@ -138,6 +148,15 @@ interface EvidenceSource {
 
 Uma fonte não é automaticamente confiável apenas por existir. Confiabilidade e completude são metadados distintos.
 
+Para ingestão multimodal, a evidência de um campo pode apontar adicionalmente para:
+
+- asset/imagem/documento específico;
+- tipo de origem (`html`, `json-ld`, `table`, `image`, `document`, `user`);
+- seletor/referência textual quando disponível;
+- região da imagem quando o método conseguir fornecê-la de forma defensável;
+- método de extração;
+- provider/modelo/prompt version quando IA for usada.
+
 ## 9. Ingestão por URL e staging
 
 Dados extraídos nunca devem ser escritos diretamente como catálogo publicado.
@@ -147,9 +166,12 @@ Fluxo:
 ```text
 source
 → import job
-→ evidence snapshot/metadata
+→ evidence snapshot/metadata/assets
+→ extraction runs
 → extracted fields
-→ validation
+→ normalization
+→ schema validation
+→ cross-source reconciliation
 → needs_review
 → approved/rejected
 → published
@@ -163,25 +185,32 @@ Um campo extraído deve poder guardar:
 - método de extração;
 - evidência/origem;
 - confiança;
-- estado de revisão.
+- estado de revisão;
+- conflito com outra fonte quando aplicável.
+
+HTML, imagem e documento são evidências independentes. Se fornecerem valores diferentes para o mesmo campo, o sistema não sobrescreve nem escolhe silenciosamente um deles.
 
 ## 10. IA/Ollama
 
-Resultados de IA são dados derivados, não autoridade.
+Resultados de IA são dados derivados do processo de extração, não autoridade.
 
 Persistir quando útil:
 
 - provider;
 - model;
 - model/version/tag identificável;
+- capabilities usadas, incluindo visão quando aplicável;
 - prompt/template version;
 - timestamp;
 - schema esperado;
 - resultado validado;
 - warnings/erros;
-- ligação à fonte.
+- ligação à fonte/asset;
+- confiança reportada quando existir, sem tratá-la como aprovação.
 
 Não é necessário armazenar raciocínio interno do modelo.
+
+Modelo sem capability visual necessária deve falhar explicitamente; não pode registrar que uma imagem foi analisada quando não foi.
 
 ## 11. Dados de bancada
 
@@ -202,13 +231,15 @@ Samples típicos:
 ```text
 throttle_percent
 thrust
-gcurrent
+current
 voltage
 power
 rpm
 ```
 
 O schema real deve usar nomes/unidades inequívocos e constraints físicas adequadas.
+
+Curvas/pontos digitalizados de imagens devem manter origem específica `digitized-from-image` ou equivalente e não são promovidos automaticamente a medição de alta confiança.
 
 ## 12. Perfis e heurísticas
 
@@ -286,9 +317,14 @@ O importador deve solicitar/detectar unidades e converter explicitamente. Não a
 Se um componente com mesmo identificador lógico apresentar dados diferentes:
 
 - comparar revisão/hash/fonte;
+- comparar condição de ensaio antes de declarar conflito;
+- normalizar unidades antes de comparar valores;
 - não sobrescrever silenciosamente;
 - criar nova revisão/candidato ou pedir decisão;
-- manter histórico quando o dado anterior já fundamentou projeto/análise.
+- manter histórico quando o dado anterior já fundamentou projeto/análise;
+- registrar decisão de revisão e evidências consideradas.
+
+Conflitos HTML × imagem × documento devem permanecer visíveis no staging até decisão explícita.
 
 ## 19. Deleção
 
@@ -306,7 +342,10 @@ Validar ao menos:
 - versões suportadas;
 - curvas válidas;
 - status de staging/publicação;
-- metadados de object storage coerentes.
+- metadados de object storage coerentes;
+- vínculo entre campo extraído e evidência;
+- impossibilidade de publicar diretamente um resultado bruto de IA sem passar pelo workflow previsto;
+- distinção entre dado extraído/declarado e dado calculado/derivado.
 
 ## 21. IndexedDB/local storage
 
@@ -328,7 +367,11 @@ Nenhum dos dois deve conter secrets da API ou substituir a fonte autoritativa Po
 - não expor credenciais PostgreSQL/MinIO no frontend;
 - dados importados por URL são não confiáveis até validação;
 - sanitizar conteúdo remoto antes de exibição;
-- imports com falha não deixam estado parcial inconsistente.
+- imports com falha não deixam estado parcial inconsistente;
+- conteúdo remoto é dado não confiável e não pode alterar instruções/permissões do agente;
+- IA não recebe credenciais nem acesso SQL direto;
+- fetch de páginas/assets deve aplicar proteção anti-SSRF;
+- política de retenção de imagens/documentos deve considerar direitos e restrições da fonte.
 
 ## 23. Backup futuro
 
@@ -345,3 +388,5 @@ O usuário deve continuar podendo manter export local legível/versionado mesmo 
 ## 24. Decisão de implementação
 
 Detalhes como ORM/query builder, layout exato de tabelas, UUID versus ULID e estratégia de migration serão escolhidos na Etapa 2A com base em código real, documentação oficial e requisitos de consulta. Qualquer escolha estrutural relevante deve gerar ADR.
+
+O desenho das tabelas de ingestão deve implementar os invariantes de `ASSISTED_INGESTION.md`, mas a IA implementadora pode propor normalização/nomes diferentes quando a solução for mais eficiente e auditável.
