@@ -1,6 +1,6 @@
 # PRD — DroneCalc
 
-**Versão:** 0.1  
+**Versão:** 0.2  
 **Status:** pré-MVP  
 **Produto:** DroneCalc  
 **Repositório:** `eduardobelopro-br/Dronecalc`
@@ -13,11 +13,12 @@ A aplicação transforma componentes e objetivos de voo em uma análise explicá
 
 ## 2. Problema
 
-A montagem DIY normalmente exige consultar múltiplas tabelas, páginas de fabricantes, testes de bancada e calculadoras isoladas. O usuário precisa combinar manualmente informações de frame, motor, hélice, ESC, bateria, eletrônica e payload, além de interpretar se a combinação faz sentido para o estilo de voo desejado.
+A montagem DIY normalmente exige consultar múltiplas tabelas, páginas de fabricantes, imagens técnicas, testes de bancada e calculadoras isoladas. O usuário precisa combinar manualmente informações de frame, motor, hélice, ESC, bateria, eletrônica e payload, além de interpretar se a combinação faz sentido para o estilo de voo desejado.
 
 Os principais problemas são:
 
 - dados distribuídos e em unidades diferentes;
+- especificações importantes disponíveis apenas em imagens, PDFs ou tabelas;
 - dificuldade de comparar variantes de projeto;
 - estimativas de autonomia frequentemente pouco transparentes;
 - uso incorreto de valores de KV, corrente, C-rating e tensão;
@@ -32,7 +33,9 @@ DroneCalc deve funcionar como uma **bancada virtual de dimensionamento**, permit
 O produto se diferencia por:
 
 - combinar cálculo e catálogo de componentes;
-- separar dado medido, dado de fabricante, cálculo, interpolação e estimativa;
+- permitir cadastro assistido a partir de URL com extração de HTML, imagens e documentos técnicos;
+- separar dado medido, dado de fabricante, dado extraído, cálculo, interpolação e estimativa;
+- preservar evidência e revisão para dados importados;
 - calcular com unidades canônicas e converter apenas na apresentação;
 - utilizar curvas reais de bancada quando disponíveis;
 - adaptar critérios ao estilo de voo;
@@ -69,11 +72,13 @@ O usuário deve conseguir:
 - comparar duas ou mais configurações;
 - importar dados de bancada;
 - cadastrar componentes não existentes no catálogo;
+- informar a página de um equipamento e obter um cadastro técnico pré-preenchido a partir de texto, tabelas, imagens e documentos disponíveis;
+- revisar conflitos e evidências antes de publicar dados extraídos no catálogo;
 - visualizar por que o sistema emitiu um alerta;
 - saber o nível de confiança de um resultado;
 - exportar ou compartilhar a configuração no futuro.
 
-## 6. Objetivos do MVP
+## 6. Objetivos do MVP ampliado
 
 O MVP deve responder de forma confiável e explicável:
 
@@ -82,17 +87,20 @@ O MVP deve responder de forma confiável e explicável:
 3. **A propulsão fornece empuxo adequado?**
 4. **Qual autonomia pode ser esperada nas condições informadas?**
 
-Além disso, o MVP deve oferecer:
+Além disso, o MVP ampliado deve oferecer:
 
 - criação e edição de projetos;
 - perfis de voo;
 - componentes customizados;
-- catálogo local inicial;
+- catálogo persistente inicial;
+- cadastro assistido por URL com staging/revisão;
+- extração multimodal quando o provider/modelo configurado suportar visão;
 - análise de compatibilidade;
 - comparação de variantes;
-- persistência local;
+- PostgreSQL como fonte persistente principal;
+- cache/drafts locais auxiliares;
 - tema claro/escuro seguindo NEXO;
-- testes automatizados do motor matemático.
+- testes automatizados do motor matemático e do pipeline crítico de ingestão.
 
 ## 7. Fora do escopo do MVP
 
@@ -147,10 +155,16 @@ O usuário escolhe ou cadastra cada componente. A análise é atualizada progres
 
 Um projeto pode ser duplicado para experimentar uma alteração sem perder a configuração original.
 
+### 8.4 Cadastro assistido de equipamento
+
+Na área de catálogo, o usuário pode informar uma URL. O sistema coleta de forma controlada dados estruturados, texto, imagens e documentos elegíveis, produz candidatos validados por schema e os grava em staging.
+
+A IA pode auxiliar na extração textual e visual, mas não publica diretamente no catálogo. O usuário/revisor deve conseguir ver evidência, conflitos e estado de revisão.
+
 ## 9. Requisitos funcionais de alto nível
 
 ### RF-01 — Projetos
-Criar, renomear, duplicar, editar e excluir projetos locais.
+Criar, renomear, duplicar, editar e excluir projetos.
 
 ### RF-02 — Componentes
 Selecionar componentes do catálogo e cadastrar componentes personalizados.
@@ -165,7 +179,7 @@ Calcular tensão nominal/cheia, energia em Wh e limites declarados da bateria.
 Comparar tensões suportadas, corrente de motor, ESC, bateria e alimentação de eletrônica.
 
 ### RF-06 — Propulsão
-Calcular empuxo total e relação empuxo/peso usando dados de bancada quando disponíveis.
+Calcular empuxo total e relação empuxo/peso usando dados de bancada quando disponíveis e modelo físico apenas quando houver parâmetros suficientes.
 
 ### RF-07 — Autonomia
 Estimar autonomia por modelo explícito e informar as hipóteses usadas.
@@ -177,7 +191,7 @@ Aplicar critérios de avaliação diferentes conforme o objetivo do usuário.
 Gerar mensagens `success`, `info`, `warning` e `danger`, sempre com justificativa.
 
 ### RF-10 — Proveniência
-Todo resultado deve indicar origem e confiança.
+Todo resultado deve indicar origem e confiança. Dados importados automaticamente devem preservar evidência suficiente para auditoria.
 
 ### RF-11 — Comparação
 Comparar ao menos duas variantes lado a lado.
@@ -186,10 +200,13 @@ Comparar ao menos duas variantes lado a lado.
 Aceitar e exibir unidades comuns sem misturar unidades internamente.
 
 ### RF-13 — Persistência
-Salvar projetos e componentes personalizados localmente.
+Persistir projetos, catálogo, revisões, evidências e staging no backend PostgreSQL; IndexedDB/local storage ficam restritos a cache/drafts/preferências/offline auxiliar.
 
 ### RF-14 — Importação/exportação
-Planejar formato JSON versionado; CSV será usado principalmente para tabelas de bancada.
+Suportar formato JSON versionado; CSV será usado principalmente para tabelas de bancada.
+
+### RF-15 — Cadastro assistido multimodal
+Permitir iniciar cadastro de equipamento por URL, extrair primeiro fontes estruturadas e, quando necessário, usar IA para texto/imagens/documentos. Todo campo de IA deve passar por schema, staging e revisão antes de publicação. Conflitos entre fontes não podem ser resolvidos silenciosamente.
 
 ## 10. Requisitos não funcionais
 
@@ -200,10 +217,10 @@ Mesmas entradas e mesma versão do motor devem produzir os mesmos resultados.
 O motor matemático não pode depender de React ou DOM.
 
 ### RNF-03 — Rastreabilidade
-Cálculos críticos devem registrar fórmula/modelo, entradas e versão do algoritmo.
+Cálculos críticos devem registrar fórmula/modelo, entradas e versão do algoritmo. Imports automáticos devem registrar fonte, método e evidência por campo quando aplicável.
 
 ### RNF-04 — Performance
-Alterações simples do projeto devem atualizar a análise sem atraso perceptível em hardware desktop comum.
+Alterações simples do projeto devem atualizar a análise sem atraso perceptível em hardware desktop comum. Processos de ingestão/IA podem ser assíncronos e devem expor estado/progresso adequado.
 
 ### RNF-05 — Acessibilidade
 Navegação por teclado, foco visível, contraste adequado e semântica ARIA nos controles relevantes.
@@ -212,10 +229,10 @@ Navegação por teclado, foco visível, contraste adequado e semântica ARIA nos
 Código não deve depender de texto em português para regras de negócio. UI inicial pode ser pt-BR.
 
 ### RNF-07 — Evolução
-Novos tipos de componente e perfis não devem exigir reescrever o motor inteiro.
+Novos tipos de componente, perfis e providers de IA não devem exigir reescrever o motor inteiro.
 
-### RNF-08 — Segurança de dados
-Nenhum segredo deve ser armazenado em código ou exportações. Persistência local é padrão no MVP.
+### RNF-08 — Segurança de dados e ingestão
+Nenhum segredo deve ser armazenado em código ou exportações. Credenciais de PostgreSQL/MinIO/Ollama não são expostas ao frontend. Fetch remoto deve ser protegido contra SSRF e conteúdo remoto não pode alterar instruções/permissões do agente. IA não recebe acesso SQL direto.
 
 ## 11. Métricas de qualidade do produto
 
@@ -227,36 +244,43 @@ Antes de chamar o MVP de estável:
 - nenhum cálculo apresentado sem unidade;
 - nenhum valor estimado apresentado como medição;
 - importação inválida não pode corromper projetos existentes;
+- dado extraído por IA não pode ser publicado sem o workflow de staging/revisão;
+- controles críticos anti-SSRF e validação de schema possuem testes explícitos;
 - perfis de voo devem ser configuráveis por dados, não por condicionais espalhadas na UI.
 
 ## 12. Experiência desejada
 
 O usuário deve conseguir começar pelo **objetivo**, não pela terminologia técnica. Ao mesmo tempo, um usuário avançado deve conseguir acessar todos os parâmetros, substituir valores e visualizar a origem do cálculo.
 
+No catálogo, o usuário deve poder colar a página do equipamento e revisar um cadastro pré-preenchido, com indicação clara do que veio de HTML, imagem/documento, IA, cálculo ou edição humana.
+
 Princípio de UX: **resumo simples na superfície; engenharia detalhada sob demanda**.
 
 ## 13. Critérios de sucesso do MVP
 
-O MVP está pronto quando um usuário consegue:
+O MVP ampliado está pronto quando um usuário consegue:
 
 1. criar um projeto Mini Long Range ou outro perfil;
 2. selecionar/cadastrar frame, motores, hélices, ESC e bateria;
-3. ver peso e energia atualizados automaticamente;
-4. carregar uma curva de bancada compatível;
-5. obter empuxo/peso e autonomia estimada;
-6. receber alertas elétricos explicáveis;
-7. duplicar a configuração e comparar uma bateria ou motor diferente;
-8. fechar e reabrir a aplicação sem perder o projeto.
+3. iniciar o cadastro de um componente por URL e revisar dados extraídos, inclusive de imagem quando houver provider visual configurado;
+4. ver peso e energia atualizados automaticamente;
+5. carregar uma curva de bancada compatível;
+6. obter empuxo/peso e autonomia estimada quando os dados permitirem;
+7. receber alertas elétricos explicáveis;
+8. duplicar a configuração e comparar uma bateria ou motor diferente;
+9. fechar e reabrir a aplicação sem perder o projeto/dados persistidos.
 
 ## 14. Riscos de produto
 
 - dados de fabricantes podem ser incompletos ou inconsistentes;
+- IA pode interpretar incorretamente texto, imagem, gráfico ou unidade;
+- páginas externas podem conter conteúdo malicioso/prompt injection ou tentar explorar o fetcher;
 - C-rating pode superestimar desempenho real da bateria;
 - uma combinação motor/hélice não pode ser inferida com boa precisão apenas por KV e tensão;
 - autonomia depende de aerodinâmica, temperatura, vento, eficiência de ESC/motor e perfil de pilotagem;
 - usuários podem interpretar uma estimativa como garantia de segurança.
 
-Mitigação: proveniência, confiança, mensagens de limitação, preferência por dados medidos e validação de entrada.
+Mitigação: proveniência, evidência por campo, staging/revisão, validação de schema, controles anti-SSRF/prompt injection, confiança, mensagens de limitação, preferência por dados medidos e validação de entrada.
 
 ## 15. Futuro do produto
 
@@ -271,4 +295,6 @@ Após o MVP, o DroneCalc poderá evoluir para:
 - aplicativo desktop com Tauri;
 - sincronização opcional;
 - API do motor de cálculo;
-- suporte a multirrotores além de quadricópteros.
+- suporte a multirrotores além de quadricópteros;
+- digitalização assistida de curvas/gráficos com validação humana;
+- busca semântica/RAG técnico sobre evidências aprovadas.
