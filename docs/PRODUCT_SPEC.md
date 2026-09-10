@@ -1,6 +1,6 @@
 # Product Spec — DroneCalc
 
-**Versão:** 0.1  
+**Versão:** 0.2  
 **Status:** pré-MVP
 
 Este documento descreve o comportamento funcional esperado. O PRD define o porquê; este documento define **o que a aplicação deve fazer**.
@@ -13,7 +13,7 @@ A aplicação terá cinco áreas principais:
 2. **Builder** — montagem do drone por componentes.
 3. **Análise** — resultados técnicos e alertas.
 4. **Comparador** — comparação de variantes.
-5. **Catálogo** — componentes, dados de fabricante e testes de bancada.
+5. **Catálogo** — componentes, cadastro assistido, evidências, dados de fabricante e testes de bancada.
 
 A navegação deverá manter o projeto ativo como contexto persistente.
 
@@ -91,7 +91,7 @@ Exemplos:
 - se bateria estiver disponível, calcular energia;
 - se motor/ESC estiverem disponíveis, validar corrente/tensão conforme dados existentes;
 - se curva motor+hélíce estiver disponível, liberar empuxo e autonomia mais confiável;
-- se não houver curva, permitir estimativa apenas quando existir um modelo explicitamente suportado, marcando baixa/média confiança.
+- se não houver curva, permitir estimativa apenas quando existir um modelo explicitamente suportado e parâmetros suficientes, marcando confiança adequada.
 
 Nunca preencher dados técnicos ausentes silenciosamente.
 
@@ -118,7 +118,7 @@ Resultados mínimos:
 - empuxo por motor no ponto analisado;
 - empuxo total;
 - TWR;
-- throttle estimado de hover;
+- throttle estimado de hover quando suportado;
 - eficiência g/W quando dados permitirem.
 
 ### Elétrica
@@ -146,7 +146,7 @@ Todo `CalculationResult` deve possuir:
 - entradas relevantes ou referência para elas;
 - observações opcionais.
 
-Origens aceitas:
+Origens aceitas incluem:
 
 - `measured`;
 - `manufacturer`;
@@ -161,6 +161,8 @@ Confiança:
 - `low`.
 
 A UI deve permitir abrir “Como foi calculado?”.
+
+Dados de catálogo extraídos automaticamente também devem permitir abrir sua evidência/origem, sem confundir confiança da extração com confiança física do dado.
 
 ## 7. Alertas de compatibilidade
 
@@ -199,7 +201,7 @@ Métricas iniciais:
 
 - massa total;
 - energia Wh;
-- empuxo máximo;
+- empuxo máximo quando suportado;
 - TWR;
 - corrente máxima;
 - potência;
@@ -256,7 +258,7 @@ O score de Mini Long Range não pode favorecer empuxo máximo de forma despropor
 
 Um componente pode ser:
 
-- oficial/importado;
+- oficial/importado e revisado;
 - comunitário futuro;
 - customizado pelo usuário.
 
@@ -265,9 +267,65 @@ Campos devem distinguir:
 - valor nominal;
 - valor máximo;
 - valor medido;
-- fonte;
+- valor declarado;
+- valor extraído automaticamente;
+- valor derivado/calculado;
+- fonte/evidência;
+- condição associada ao valor;
 - data/revisão opcional;
 - notas.
+
+### 11.1 Cadastro manual
+
+O usuário pode criar/duplicar um componente e preencher os campos permitidos pela categoria.
+
+### 11.2 Cadastro assistido por URL
+
+O catálogo deve oferecer uma ação de cadastro assistido onde o usuário informa a URL da página do equipamento.
+
+Fluxo esperado:
+
+```text
+URL
+→ coleta segura
+→ extração determinística
+→ descoberta de imagens/documentos
+→ IA textual/visual quando necessária e suportada
+→ normalização
+→ validação de schema
+→ comparação entre fontes
+→ staging
+→ revisão
+→ publicação
+```
+
+O comportamento detalhado é normatizado por `ASSISTED_INGESTION.md`.
+
+### 11.3 Imagens técnicas
+
+A aplicação deve poder utilizar imagens como fonte de dados quando o provider configurado possuir capacidade visual. Exemplos: ficha técnica, tabela, desenho dimensional, etiqueta e gráfico.
+
+Para cada campo extraído visualmente, o sistema deve preservar, quando disponível:
+
+- asset de origem;
+- valor bruto;
+- valor normalizado;
+- unidade;
+- método de extração;
+- modelo/provider;
+- confiança da extração;
+- região da imagem opcional;
+- estado de revisão.
+
+Modelo sem visão deve informar indisponibilidade, não fingir análise.
+
+### 11.4 Conflitos
+
+Se HTML, imagem ou documento divergirem, mostrar conflito para revisão. Não escolher silenciosamente o valor com maior confidence do modelo.
+
+### 11.5 Extraído versus derivado
+
+Exemplo: `KV = 1860` lido da ficha é dado extraído. `Kt` calculado a partir desse KV é dado derivado pelo Physics Engine e deve registrar fórmula/versão. A UI e persistência não podem apresentá-los como se ambos tivessem sido declarados pelo fabricante.
 
 ## 12. Testes de bancada
 
@@ -291,6 +349,8 @@ Amostras típicas:
 
 Interpolação só pode ocorrer dentro do intervalo coberto pelos dados, salvo modelo de extrapolação explicitamente documentado. O padrão do MVP é **não extrapolar**.
 
+Curvas digitalizadas a partir de imagens devem manter essa proveniência e não recebem automaticamente o mesmo nível de confiança de dados tabulares originais.
+
 ## 13. Unidades
 
 Entradas e apresentação podem aceitar:
@@ -302,7 +362,9 @@ Entradas e apresentação podem aceitar:
 - A;
 - W, kW;
 - Wh;
-- g, N para empuxo conforme contexto de UI, com representação interna inequívoca.
+- N·m;
+- RPM;
+- g/gf e N para empuxo conforme contexto de UI, com representação interna inequívoca.
 
 O motor utiliza unidades canônicas definidas no domínio.
 
@@ -314,21 +376,26 @@ A UI deve diferenciar:
 - `não aplicável`;
 - `estimativa indisponível`;
 - `erro de entrada`;
+- `extraído aguardando revisão`;
+- `conflito de fontes`;
 - valor zero real.
 
 Nunca representar todos esses estados como `0`.
 
 ## 15. Persistência
 
-MVP: armazenamento local versionado.
+PostgreSQL é a fonte principal de dados persistidos do produto.
 
 Requisitos:
 
-- autosave com debounce;
-- migrações entre versões de schema;
+- migrations versionadas;
+- projects/catalog/staging/evidências persistidos no backend;
+- MinIO/S3-compatible para imagens/documentos grandes;
+- IndexedDB apenas para cache, drafts, preferências e suporte offline auxiliar;
+- autosave/drafts sem perda silenciosa;
 - exportação JSON;
-- importação validada antes de substituir/salvar;
-- recuperação segura após erro de parsing.
+- importação validada antes de persistência autoritativa;
+- recuperação segura após erro de parsing/processamento.
 
 ## 16. Acessibilidade
 
@@ -337,11 +404,12 @@ Requisitos:
 - estados não comunicados apenas por cor;
 - tabelas com cabeçalhos semânticos;
 - mensagens de validação associadas aos inputs;
-- uso por teclado para fluxos principais.
+- uso por teclado para fluxos principais;
+- conflitos/evidências de import legíveis sem depender apenas de cor.
 
 ## 17. Responsividade
 
-Desktop é prioridade do MVP, pois comparação e builder exigem densidade de informação. Tablet deve permanecer utilizável. Mobile pode apresentar layout simplificado, mas não é requisito de paridade completa no primeiro ciclo.
+Desktop é prioridade do MVP, pois comparação, builder e revisão de imports exigem densidade de informação. Tablet deve permanecer utilizável. Mobile pode apresentar layout simplificado, mas não é requisito de paridade completa no primeiro ciclo.
 
 ## 18. Critérios de aceite gerais
 
@@ -352,5 +420,7 @@ Uma funcionalidade só está concluída quando:
 - testes apropriados existem;
 - unidade e proveniência aparecem nos resultados;
 - estados de erro/incompleto foram considerados;
+- dados extraídos por IA não pulam staging/revisão;
+- evidência de campos importados é preservada;
 - identidade NEXO foi respeitada;
 - documentação foi atualizada se houve mudança de contrato.
