@@ -21,14 +21,29 @@ Este diretório contém a fonte de verdade do produto e da implementação do Dr
 15. [`RELEASE_CRITERIA.md`](RELEASE_CRITERIA.md) — gates para etapas, MVP e releases.
 16. [`ROADMAP.md`](ROADMAP.md) — fases e dependências de implementação.
 17. [`DEVELOPMENT.md`](DEVELOPMENT.md) — padrões de desenvolvimento.
-18. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato e prompts para agentes de IA.
-19. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
-20. [`adr/`](adr/README.md) — Architecture Decision Records.
+18. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato geral para agentes de IA.
+19. [`prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`](prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md) — primeira orientação executável para a IA implementadora.
+20. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
+21. [`adr/`](adr/README.md) — Architecture Decision Records.
 
 Na raiz do repositório também existem:
 
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — guia de contribuição;
 - [`../CHANGELOG.md`](../CHANGELOG.md) — histórico de mudanças relevantes.
+
+## Arquitetura vigente
+
+O MVP ampliado adota:
+
+- Web React/TypeScript;
+- API Node.js/TypeScript;
+- PostgreSQL como fonte principal de dados;
+- MinIO/S3-compatible para imagens e documentos;
+- Ollama atrás de interface substituível para IA local;
+- IndexedDB apenas para cache/drafts/preferências/offline auxiliar;
+- calculation engine e domínio independentes de UI, banco e IA.
+
+A mudança é detalhada no [`adr/0002-postgresql-object-storage-ollama.md`](adr/0002-postgresql-object-storage-ollama.md).
 
 ## Hierarquia de autoridade
 
@@ -42,22 +57,23 @@ Quando documentos entrarem em conflito, utilizar esta prioridade:
 6. `NEXO_DESIGN_SYSTEM.md` e `UX_SPEC.md` para apresentação e interação.
 7. `ROADMAP.md` para sequência de implementação.
 
-Histórias de usuário e matriz de rastreabilidade não devem contrariar documentos superiores; servem para operacionalizá-los.
+Prompts de implementação operacionalizam os documentos superiores e nunca devem contradizê-los silenciosamente.
 
 ## Regra de atualização
 
 Mudanças que alterem uma regra superior devem atualizar os documentos dependentes no mesmo pull request. Em especial:
 
 - fórmula alterada → `CALCULATION_ENGINE.md`, testes e changelog quando material;
-- schema alterado → `DOMAIN_MODEL.md`/`DATA_MODEL.md`, migração e testes;
+- schema alterado → `DOMAIN_MODEL.md`/`DATA_MODEL.md`, migration e testes;
 - requisito alterado → PRD/Product Spec, user stories e rastreabilidade;
 - arquitetura alterada → `ARCHITECTURE.md` e ADR;
 - UI/identidade alterada → `NEXO_DESIGN_SYSTEM.md`/`UX_SPEC.md`;
-- fase concluída → `ROADMAP.md` e changelog/relatório da etapa.
+- etapa concluída → `ROADMAP.md` e relatório da etapa;
+- orientação da IA alterada → prompt correspondente e `AI_IMPLEMENTATION_GUIDE.md` quando a regra for geral.
 
 ## Estado da especificação
 
-Versão inicial: **0.1**  
+Versão da arquitetura/roadmap: **0.2**  
 Status: **planejamento / pré-MVP**
 
-A documentação deve evoluir junto com o código. Não manter decisões relevantes apenas em issues, chats ou prompts de IA.
+A documentação deve evoluir junto com o código. Não manter decisões relevantes apenas em issues, chats ou prompts temporários.
