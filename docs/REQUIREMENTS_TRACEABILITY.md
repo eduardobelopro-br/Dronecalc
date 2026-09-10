@@ -1,6 +1,6 @@
 # Matriz de Rastreabilidade de Requisitos — DroneCalc
 
-**Versão:** 0.3
+**Versão:** 0.4
 
 Este documento liga requisitos do PRD às especificações, etapas do roadmap e tipos de teste esperados.
 
@@ -8,30 +8,31 @@ Este documento liga requisitos do PRD às especificações, etapas do roadmap e 
 |---|---|---|---|---|
 | RF-01 | Projetos | PRODUCT_SPEC §2 | Fases 2 e 9 | integração/UI |
 | RF-02 | Componentes | COMPONENT_CATALOG | Fases 4, 5, 6 e 9 | schema/UI/ingestão |
-| RF-03 | Massa | CALCULATION_ENGINE §3 | Fase 3 | unitário + fixture |
+| RF-03 | Massa | CALCULATION_ENGINE §3 + PROPULSION_RECOMMENDATION §2–3 | Fases 3, 8 e 9 | unitário + fixture |
 | RF-04 | Energia | CALCULATION_ENGINE §5 | Fase 3 | unitário |
 | RF-05 | Sistema elétrico | CALCULATION_ENGINE §16 + PHYSICS_ENGINE | Fases 3 e 7 | unitário + limites |
 | RF-06 | Propulsão | CALCULATION_ENGINE §§7–9 + PHYSICS_ENGINE + BENCH_DATA_WORKSPACE | Fase 7 | unitário + fixture de curva/modelo |
-| RF-07 | Autonomia | CALCULATION_ENGINE §12 | Fases 3, 7 e 9 | unitário + regressão |
-| RF-08 | Perfis de voo | FLIGHT_PROFILES | Fase 8 | unitário/scoring |
-| RF-09 | Compatibilidade | PRODUCT_SPEC §7 | Fases 3, 7, 8 e 9 | unitário + integração |
-| RF-10 | Proveniência | PRODUCT_SPEC §6 + ASSISTED_INGESTION + BENCH_DATA_WORKSPACE | Todas as etapas técnicas | unitário + UI |
+| RF-07 | Autonomia | CALCULATION_ENGINE §12 | Fases 3, 7, 8 e 9 | unitário + regressão |
+| RF-08 | Perfis de voo | FLIGHT_PROFILES + PROPULSION_RECOMMENDATION §6 | Fase 8 | unitário/scoring |
+| RF-09 | Compatibilidade | PRODUCT_SPEC §7 + PROPULSION_RECOMMENDATION §9 | Fases 3, 7, 8 e 9 | unitário + integração |
+| RF-10 | Proveniência | PRODUCT_SPEC §6 + ASSISTED_INGESTION + BENCH_DATA_WORKSPACE + PROPULSION_RECOMMENDATION | Todas as etapas técnicas | unitário + UI |
 | RF-11 | Comparação | PRODUCT_SPEC §8 | Fase 10 | integração/UI |
 | RF-12 | Unidades | CALCULATION_ENGINE §2 | Etapa 1D | unitário |
 | RF-13 | Persistência | DATA_MODEL | Fase 2 | integração/migrations |
 | RF-14 | Import/export | DATA_MODEL + BENCH_DATA_WORKSPACE | Etapa 7C e Fase 11 | integração |
 | RF-15 | Cadastro assistido multimodal | ASSISTED_INGESTION + MANUFACTURER_SCRAPING + PRODUCT_SPEC §11 | Fases 5 e 6 | segurança + schema + integração/UI |
 | RF-16 | Workspace Bancada | BENCH_DATA_WORKSPACE + PRODUCT_SPEC §12 + UX_SPEC §14.1 | Etapas 7A–7E | unitário + integração + UI |
+| RF-17 | Recomendação de propulsão orientada ao uso | PROPULSION_RECOMMENDATION + PRD §8.6 | Etapas 8D–8H e 9C | unitário + integração + ranking/UI |
 
 ## Requisitos não funcionais
 
 | Req. | Resumo | Evidência esperada |
 |---|---|---|
-| RNF-01 | Determinismo | testes do calculation engine |
-| RNF-02 | Testabilidade | domínio/motor sem React e suite unitária |
-| RNF-03 | Rastreabilidade | formulaId/modelVersion/proveniência/evidência por campo |
-| RNF-04 | Performance | medições quando UI/análise/ingestão estiverem funcionais |
-| RNF-05 | Acessibilidade | UX spec + testes/inspeção, inclusive tabela/gráficos de Bancada |
+| RNF-01 | Determinismo | testes do calculation engine e ranking |
+| RNF-02 | Testabilidade | domínio/motor/recomendador sem React e suite unitária |
+| RNF-03 | Rastreabilidade | formulaId/modelVersion/proveniência/evidência por campo + perfil/versão/motivos do ranking |
+| RNF-04 | Performance | medições quando UI/análise/ingestão/recomendador estiverem funcionais |
+| RNF-05 | Acessibilidade | UX spec + testes/inspeção, inclusive tabela/gráficos de Bancada e explicação do ranking |
 | RNF-06 | Internacionalização | regras sem dependência de strings pt-BR |
 | RNF-07 | Evolução | perfis/data-driven, módulos desacoplados e AI Provider substituível |
 | RNF-08 | Segurança de dados/ingestão | secrets ausentes, anti-SSRF, schema validation, staging e prompt-injection boundaries |
@@ -100,7 +101,7 @@ Rastreia: RF-04, RF-05, RF-10.
 **Quando** avaliadas para Mini Long Range  
 **Então** o score deve refletir maior peso de eficiência/autonomia e explicar o resultado.
 
-Rastreia: RF-08.
+Rastreia: RF-08, RF-17.
 
 ### AC-09 — Danger e score
 
@@ -108,7 +109,7 @@ Rastreia: RF-08.
 **Quando** ranking é exibido  
 **Então** o score não pode mascarar a incompatibilidade.
 
-Rastreia: RF-08, RF-09.
+Rastreia: RF-08, RF-09, RF-17.
 
 ### AC-10 — Persistência
 
@@ -205,6 +206,38 @@ Rastreia: RF-10, RF-16, RNF-03, RNF-05.
 **Então** a UI não usa por padrão uma única escala Y para essas grandezas incompatíveis e mantém tabela acessível com unidades explícitas.
 
 Rastreia: RF-12, RF-16, RNF-05.
+
+### AC-22 — Massa por candidato
+
+**Dado** dois motores candidatos com massas diferentes  
+**Quando** o recomendador avalia ambos  
+**Então** cada variante recebe sua própria massa de decolagem e seu próprio empuxo requerido de hover; o sistema não usa uma massa-base fixa que ignore os motores candidatos.
+
+Rastreia: RF-03, RF-17, RNF-01.
+
+### AC-23 — Eficiência versus empuxo máximo
+
+**Dado** dois conjuntos compatíveis para Mini Long Range, um com maior empuxo máximo e outro mais leve/eficiente no regime relevante  
+**Quando** ambos atendem ao TWR/reserva mínima  
+**Então** o segundo pode ocupar posição superior e a UI explica a diferença de consumo, massa, autonomia e reserva.
+
+Rastreia: RF-08, RF-17, RNF-03.
+
+### AC-24 — Cobertura e confiança separadas do score
+
+**Dado** candidato com score físico aparentemente alto mas dados incompletos/estimados  
+**Quando** o ranking é exibido  
+**Então** score, cobertura de dados e confiança aparecem separadamente e a falta de dados não é convertida silenciosamente em vantagem numérica.
+
+Rastreia: RF-10, RF-17, RNF-03.
+
+### AC-25 — Fase operacional sem dados
+
+**Dado** perfil operacional contendo hover e cruzeiro, mas sem modelo defensável para cruzeiro  
+**Quando** consumo ponderado é solicitado  
+**Então** o cruzeiro não é tratado como corrente zero; a cobertura é marcada como incompleta e o resultado é limitado/indisponível conforme contrato.
+
+Rastreia: RF-07, RF-08, RF-17, RNF-03.
 
 ## Atualização da matriz
 
