@@ -1,12 +1,14 @@
 # Perfis de Voo — DroneCalc
 
-**Versão:** 0.1
+**Versão:** 0.2
 
 ## 1. Objetivo
 
 Perfis de voo transformam intenção do usuário em critérios técnicos de avaliação. Eles não são presets rígidos de componentes e não substituem análise física.
 
 Um perfil deve responder: **quais características são mais importantes para este tipo de drone?**
+
+Os perfis também alimentam o recomendador definido em `PROPULSION_RECOMMENDATION.md`, determinando como eficiência, autonomia, massa, TWR/reserva e outras dimensões são ponderadas depois que compatibilidade e requisitos físicos mínimos forem avaliados.
 
 ## 2. Princípios
 
@@ -16,7 +18,10 @@ Um perfil deve responder: **quais características são mais importantes para es
 - nenhum perfil pode ocultar uma incompatibilidade `danger`;
 - faixas de hélice, TWR ou autonomia são preferências, não verdades universais;
 - “sub-250 g” é restrição independente;
-- perfil principal pode futuramente receber características secundárias/híbridas.
+- perfil principal pode receber características secundárias/híbridas;
+- score de perfil não substitui recálculo de massa, compatibilidade ou ponto de operação;
+- maior empuxo máximo não significa automaticamente maior adequação;
+- confiança/cobertura de dados devem permanecer separadas do score de adequação.
 
 ## 3. Estrutura sugerida
 
@@ -142,7 +147,8 @@ Regras específicas:
 - `sub250g` pode ser ativado, mas não define o perfil;
 - faixa preferida de hélice pode começar em aproximadamente 3,5–5 polegadas como heurística configurável, nunca como bloqueio universal;
 - GPS, receptor e sistemas de vídeo entram no orçamento de massa e energia normalmente;
-- configurações que dependam de margem elétrica mínima devem ser penalizadas mesmo se a autonomia teórica parecer boa.
+- configurações que dependam de margem elétrica mínima devem ser penalizadas mesmo se a autonomia teórica parecer boa;
+- o recomendador pode preferir conjunto com menor TWR máximo quando ambos atendem ao mínimo e o conjunto escolhido apresenta melhor eficiência/autonomia/baixo peso.
 
 ### 4.6 Cinewhoop
 
@@ -187,6 +193,8 @@ interface ProjectConstraints {
 }
 ```
 
+Hard constraints são avaliadas antes do score do perfil.
+
 ## 6. Preferências do usuário
 
 Além do perfil, o assistente poderá perguntar:
@@ -201,7 +209,40 @@ Além do perfil, o assistente poderá perguntar:
 
 Esses dados ajustam pesos ou adicionam restrições, sem alterar a definição global do perfil.
 
-## 7. Perfil híbrido futuro
+## 7. Perfil operacional orientado ao uso
+
+O perfil de voo descreve prioridades; o perfil operacional descreve quais regimes devem receber maior atenção no consumo/eficiência.
+
+Contrato conceitual:
+
+```ts
+interface OperatingProfile {
+  schemaVersion: number
+  id: string
+  phases: Array<{
+    kind: 'hover' | 'cruise' | 'climb' | 'aggressive' | 'reserve'
+    weight: number
+  }>
+}
+```
+
+Regras:
+
+- pesos são normalizados/versionados;
+- perfil operacional não é planejamento de rota/missão autônoma;
+- fase sem dado/modelo defensável não recebe corrente zero;
+- consumo de cruzeiro não pode ser inventado como porcentagem fixa de hover;
+- cobertura das fases deve ser apresentada separadamente do score;
+- o MVP pode começar com poucos regimes e evoluir conforme o Physics Engine/dados de bancada permitirem.
+
+Exemplos de intenção, não constantes físicas:
+
+- Mini Long Range: hover/cruzeiro dominantes, reserva moderada;
+- Racing: regimes agressivos/reserva dominantes;
+- Cinematic: hover/operação estável dominantes;
+- Freestyle: mistura de operação normal com alta reserva/transientes.
+
+## 8. Perfil híbrido
 
 Permitir combinar um perfil principal com sliders de intenção:
 
@@ -215,7 +256,7 @@ Compactação    75
 
 O resultado deve ser salvo no projeto como uma cópia normalizada dos objetivos, de forma que uma futura mudança no preset global não altere silenciosamente um projeto antigo.
 
-## 8. Score
+## 9. Score
 
 Score recomendado: 0–100, calculado por dimensões normalizadas.
 
@@ -227,13 +268,15 @@ score = Σ(weight_i × metric_score_i) / Σ(weight_i) - penalties
 
 Nunca calcular diretamente sobre métricas de unidades incompatíveis sem normalização.
 
+O recomendador deve primeiro recalcular a massa de cada candidato e executar compatibilidade. O score só compara candidatos que possuem estado técnico suficientemente definido conforme `PROPULSION_RECOMMENDATION.md`.
+
 ### Penalidades obrigatórias
 
-- incompatibilidade `danger` pode invalidar o score global ou limitar o máximo;
+- incompatibilidade `danger` invalida o candidato ou aplica regra dominante documentada; não pode ser compensada por score;
 - `warning` pode aplicar penalidade configurada;
-- falta de dado reduz confiança e deve aparecer separadamente do score.
+- falta de dado reduz cobertura/confiança e deve aparecer separadamente do score.
 
-## 9. Explicabilidade
+## 10. Explicabilidade
 
 Ao mostrar “87/100 para Mini Long Range”, a UI deve detalhar algo como:
 
@@ -249,7 +292,9 @@ Penalidades
 - margem de bateria baixa: -4
 ```
 
-## 10. Dados ausentes
+Para ranking de propulsão, também mostrar os motivos determinantes, por exemplo menor massa, menor consumo no ponto de hover, maior autonomia ou maior reserva de potência.
+
+## 11. Dados ausentes
 
 Score incompleto não deve parecer completo.
 
@@ -257,13 +302,14 @@ Exemplo:
 
 ```text
 Adequação preliminar: 81/100
+Cobertura dos dados: 72%
 Confiança: média
 2 dimensões ainda sem dados: eficiência e autonomia
 ```
 
 Alternativamente, suspender score global até existir cobertura mínima definida.
 
-## 11. Configuração e versionamento
+## 12. Configuração e versionamento
 
 Perfis devem possuir:
 
@@ -272,9 +318,9 @@ Perfis devem possuir:
 - data de alteração opcional;
 - changelog quando thresholds/weights mudarem materialmente.
 
-Projetos devem armazenar qual versão do perfil foi usada na análise.
+Projetos devem armazenar qual versão do perfil foi usada na análise/ranking.
 
-## 12. Perfis futuros
+## 13. Perfis futuros
 
 - Cruiser;
 - Payload;
