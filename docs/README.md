@@ -17,16 +17,17 @@ Este diretório contém a fonte de verdade do produto e da implementação do Dr
 11. [`UX_SPEC.md`](UX_SPEC.md) — fluxos, navegação e estados de interface.
 12. [`DATA_MODEL.md`](DATA_MODEL.md) — persistência, importação/exportação e versionamento.
 13. [`ASSISTED_INGESTION.md`](ASSISTED_INGESTION.md) — cadastro por URL, extração de imagens por IA, evidência, staging e reconciliação de fontes.
-14. [`COMPONENT_CATALOG.md`](COMPONENT_CATALOG.md) — categorias, campos e dados de bancada.
-15. [`TEST_STRATEGY.md`](TEST_STRATEGY.md) — testes unitários, integração e validação numérica.
-16. [`SAFETY_AND_LIMITATIONS.md`](SAFETY_AND_LIMITATIONS.md) — limites, incerteza e comunicação responsável.
-17. [`RELEASE_CRITERIA.md`](RELEASE_CRITERIA.md) — gates para etapas, MVP e releases.
-18. [`ROADMAP.md`](ROADMAP.md) — fases e dependências de implementação.
-19. [`DEVELOPMENT.md`](DEVELOPMENT.md) — padrões de desenvolvimento.
-20. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato geral para agentes de IA.
-21. [`prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`](prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md) — primeira orientação executável para a IA implementadora.
-22. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
-23. [`adr/`](adr/README.md) — Architecture Decision Records.
+14. [`MANUFACTURER_SCRAPING.md`](MANUFACTURER_SCRAPING.md) — scraping controlado de páginas oficiais, PDFs/assets, snapshots, segurança e separação scraper × IA.
+15. [`COMPONENT_CATALOG.md`](COMPONENT_CATALOG.md) — categorias, campos e dados de bancada.
+16. [`TEST_STRATEGY.md`](TEST_STRATEGY.md) — testes unitários, integração e validação numérica.
+17. [`SAFETY_AND_LIMITATIONS.md`](SAFETY_AND_LIMITATIONS.md) — limites, incerteza e comunicação responsável.
+18. [`RELEASE_CRITERIA.md`](RELEASE_CRITERIA.md) — gates para etapas, MVP e releases.
+19. [`ROADMAP.md`](ROADMAP.md) — fases e dependências de implementação.
+20. [`DEVELOPMENT.md`](DEVELOPMENT.md) — padrões de desenvolvimento.
+21. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato geral para agentes de IA.
+22. [`prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`](prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md) — primeira orientação executável para a IA implementadora.
+23. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
+24. [`adr/`](adr/README.md) — Architecture Decision Records.
 
 Na raiz do repositório também existem:
 
@@ -46,7 +47,7 @@ O MVP ampliado adota:
 - calculation engine e domínio independentes de UI, banco e IA;
 - duas rotas de propulsão complementares: dados de bancada como referência preferencial e Physics Engine teórico somente quando houver parâmetros suficientes.
 
-A mudança de infraestrutura é detalhada no [`adr/0002-postgresql-object-storage-ollama.md`](adr/0002-postgresql-object-storage-ollama.md). O pipeline de cadastro por URL e imagens é especificado em [`ASSISTED_INGESTION.md`](ASSISTED_INGESTION.md).
+A mudança de infraestrutura é detalhada no [`adr/0002-postgresql-object-storage-ollama.md`](adr/0002-postgresql-object-storage-ollama.md). O pipeline geral de cadastro por URL e imagens é especificado em [`ASSISTED_INGESTION.md`](ASSISTED_INGESTION.md); a coleta direta de páginas oficiais de fabricantes é detalhada em [`MANUFACTURER_SCRAPING.md`](MANUFACTURER_SCRAPING.md).
 
 ## Hierarquia de autoridade
 
@@ -55,7 +56,7 @@ Quando documentos entrarem em conflito, utilizar esta prioridade:
 1. `PRD.md` para intenção de produto e escopo.
 2. `PRODUCT_SPEC.md` para comportamento funcional.
 3. `CALCULATION_ENGINE.md` para regras matemáticas gerais e `PHYSICS_ENGINE.md` para o modelo físico avançado de propulsão.
-4. `DOMAIN_MODEL.md`, `DATA_MODEL.md` e `ASSISTED_INGESTION.md` para contratos de dados, persistência e ingestão.
+4. `DOMAIN_MODEL.md`, `DATA_MODEL.md`, `ASSISTED_INGESTION.md` e `MANUFACTURER_SCRAPING.md` para contratos de dados, persistência e ingestão.
 5. `ARCHITECTURE.md` e ADRs para limites e decisões técnicas.
 6. `NEXO_DESIGN_SYSTEM.md` e `UX_SPEC.md` para apresentação e interação.
 7. `ROADMAP.md` para sequência de implementação.
@@ -69,7 +70,7 @@ Mudanças que alterem uma regra superior devem atualizar os documentos dependent
 - fórmula geral alterada → `CALCULATION_ENGINE.md`, testes e changelog quando material;
 - modelo de bateria/motor/torque/hélice/propulsão alterado → `PHYSICS_ENGINE.md`, `CALCULATION_ENGINE.md` quando aplicável, fixtures físicos e testes;
 - schema alterado → `DOMAIN_MODEL.md`/`DATA_MODEL.md`, migration e testes;
-- pipeline de ingestão alterado → `ASSISTED_INGESTION.md`, segurança, testes e roadmap quando a sequência mudar;
+- pipeline de ingestão alterado → `ASSISTED_INGESTION.md`, `MANUFACTURER_SCRAPING.md` quando aplicável, segurança, testes e roadmap quando a sequência mudar;
 - requisito alterado → PRD/Product Spec, user stories e rastreabilidade;
 - arquitetura alterada → `ARCHITECTURE.md` e ADR;
 - UI/identidade alterada → `NEXO_DESIGN_SYSTEM.md`/`UX_SPEC.md`;
