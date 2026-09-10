@@ -1,6 +1,6 @@
 # Product Spec — DroneCalc
 
-**Versão:** 0.3  
+**Versão:** 0.4  
 **Status:** pré-MVP
 
 Este documento descreve o comportamento funcional esperado. O PRD define o porquê; este documento define **o que a aplicação deve fazer**.
@@ -10,7 +10,7 @@ Este documento descreve o comportamento funcional esperado. O PRD define o porqu
 A aplicação terá seis áreas principais:
 
 1. **Projetos** — lista, criação, duplicação e gerenciamento.
-2. **Builder** — montagem do drone por componentes.
+2. **Builder** — montagem do drone por componentes e acesso à recomendação de propulsão.
 3. **Análise** — resultados técnicos e alertas.
 4. **Comparador** — comparação de variantes.
 5. **Catálogo** — componentes, cadastro assistido, evidências e dados de fabricante.
@@ -82,6 +82,10 @@ Cada item adicionado deve exibir:
 - origem dos dados;
 - indicador de completude dos campos necessários.
 
+A massa do projeto deve ser recalculada sempre que uma peça for adicionada, removida, substituída ou tiver quantidade/massa alterada. Componente sem massa conhecida não pode ser tratado silenciosamente como `0 g`.
+
+O Builder deve oferecer acesso à recomendação de propulsão quando existirem dependências suficientes para avaliar candidatos.
+
 ## 4. Análise progressiva
 
 A análise não deve exigir projeto completo.
@@ -92,7 +96,8 @@ Exemplos:
 - se bateria estiver disponível, calcular energia;
 - se motor/ESC estiverem disponíveis, validar corrente/tensão conforme dados existentes;
 - se curva motor+hélíce estiver disponível, liberar empuxo e autonomia mais confiável;
-- se não houver curva, permitir estimativa apenas quando existir um modelo explicitamente suportado e parâmetros suficientes, marcando confiança adequada.
+- se não houver curva, permitir estimativa apenas quando existir um modelo explicitamente suportado e parâmetros suficientes, marcando confiança adequada;
+- se houver componentes suficientes para gerar candidatos, permitir recomendação parcial/completa conforme cobertura dos dados.
 
 Nunca preencher dados técnicos ausentes silenciosamente.
 
@@ -105,7 +110,8 @@ Resultados mínimos:
 - massa da bateria;
 - payload;
 - massa total de decolagem;
-- distribuição percentual por categoria.
+- distribuição percentual por categoria;
+- indicação explícita de massa parcial quando houver componentes sem massa.
 
 ### Energia
 - tensão nominal;
@@ -135,6 +141,18 @@ Resultados mínimos:
 - cruzeiro, quando modelo/dados suportarem;
 - cenário de maior potência, quando suportado;
 - capacidade utilizável considerada.
+
+### Recomendação
+Quando solicitada e suportada:
+- conjunto motor + hélice + bateria/tensão;
+- massa final específica do candidato;
+- hover/TWR/reserva;
+- consumo/eficiência/autonomia disponíveis;
+- compatibilidade;
+- score do perfil;
+- cobertura dos dados;
+- confiança;
+- motivos do ranking.
 
 ## 6. Proveniência e confiança
 
@@ -166,6 +184,8 @@ A UI deve permitir abrir “Como foi calculado?”.
 
 Dados de catálogo extraídos automaticamente também devem permitir abrir sua evidência/origem, sem confundir confiança da extração com confiança física do dado.
 
+Para rankings, `profileScore`, `dataCoverage` e `confidence` devem ser apresentados separadamente.
+
 ## 7. Alertas de compatibilidade
 
 Severidades:
@@ -195,6 +215,8 @@ Margem: 12,9%
 Severidade: warning
 ```
 
+Uma incompatibilidade `danger` não pode ser compensada por score de perfil alto no recomendador.
+
 ## 8. Comparador
 
 Comparar no mínimo duas configurações. Mostrar apenas métricas comparáveis e destacar diferenças relevantes.
@@ -210,7 +232,8 @@ Métricas iniciais:
 - hover estimado;
 - autonomia;
 - número e severidade dos alertas;
-- score do perfil de voo, quando disponível.
+- score do perfil de voo, quando disponível;
+- cobertura/confiança quando a comparação usar dados de qualidades diferentes.
 
 O comparador não deve declarar um “vencedor” sem explicar o critério.
 
@@ -239,6 +262,8 @@ A primeira versão suporta:
 - `mini-long-range`;
 - `cinewhoop`.
 
+O sistema pode associar um perfil operacional versionado para ponderar regimes como hover/cruzeiro/subida/agressivo/reserva quando houver dados físicos defensáveis. Isso não é planejamento de rota/missão autônoma.
+
 ## 10. Mini Long Range
 
 Deve ser perfil próprio.
@@ -254,7 +279,7 @@ Prioriza:
 
 Tamanho de hélice pode ter faixa preferida, mas não deve ser regra absoluta. A opção sub-250 g é uma restrição separada.
 
-O score de Mini Long Range não pode favorecer empuxo máximo de forma desproporcional. Eficiência e energia útil devem pesar mais que potência bruta.
+O score de Mini Long Range não pode favorecer empuxo máximo de forma desproporcional. Eficiência e energia útil devem pesar mais que potência bruta. Um candidato com menor TWR pode superar outro no ranking quando ambos atendem ao mínimo e o primeiro apresenta melhor compromisso de eficiência, autonomia e massa.
 
 ## 11. Catálogo
 
@@ -420,7 +445,40 @@ empuxo requerido por motor
 
 Se o alvo estiver fora da curva, retornar indisponibilidade/warning; não extrapolar silenciosamente.
 
-## 13. Unidades
+## 13. Recomendação de propulsão orientada ao uso
+
+A recomendação deve seguir `PROPULSION_RECOMMENDATION.md`.
+
+A unidade de recomendação é o conjunto:
+
+```text
+motor + hélice + bateria/tensão (+ ESC quando necessário)
+```
+
+Para cada candidato o sistema deve:
+
+1. criar uma variante virtual sem modificar o projeto do usuário;
+2. recalcular massa seca/decolagem incluindo as próprias peças candidatas;
+3. recalcular empuxo requerido por motor;
+4. verificar frame/hélice, tensão, corrente, ESC/bateria e demais hard constraints;
+5. localizar o ponto de operação em curva aprovada ou Physics Engine quando válido;
+6. calcular consumo, eficiência, TWR e autonomia disponíveis;
+7. aplicar prioridades do perfil de voo/uso;
+8. gerar ranking explicável.
+
+Regras obrigatórias:
+
+- motor de maior empuxo máximo não vence automaticamente;
+- eficiência é avaliada no regime relevante quando houver dados;
+- fase operacional sem dados não é tratada como consumo zero;
+- `danger` não é mascarado por score;
+- `profileScore`, `dataCoverage` e `confidence` são separados;
+- sem dados físicos suficientes, mostrar `dados insuficientes` em vez de inventar números;
+- aplicar um candidato ao projeto exige ação explícita do usuário.
+
+A UI deve permitir abrir `Por que foi recomendado?` e mostrar os principais trade-offs entre candidatos.
+
+## 14. Unidades
 
 Entradas e apresentação podem aceitar:
 
@@ -439,7 +497,7 @@ Entradas e apresentação podem aceitar:
 
 O motor utiliza unidades canônicas definidas no domínio.
 
-## 14. Estados vazios e incompletos
+## 15. Estados vazios e incompletos
 
 A UI deve diferenciar:
 
@@ -449,11 +507,13 @@ A UI deve diferenciar:
 - `erro de entrada`;
 - `extraído aguardando revisão`;
 - `conflito de fontes`;
+- `candidato incompatível`;
+- `ranking com cobertura incompleta`;
 - valor zero real.
 
 Nunca representar todos esses estados como `0`.
 
-## 15. Persistência
+## 16. Persistência
 
 PostgreSQL é a fonte principal de dados persistidos do produto.
 
@@ -468,7 +528,9 @@ Requisitos:
 - importação validada antes de persistência autoritativa;
 - recuperação segura após erro de parsing/processamento.
 
-## 16. Acessibilidade
+Avaliações temporárias de candidatos podem ser calculadas em memória/cache. Se rankings forem persistidos/exportados, devem guardar versões de perfil/modelo e referências suficientes para reprodução.
+
+## 17. Acessibilidade
 
 - foco visível;
 - controles rotulados;
@@ -477,13 +539,14 @@ Requisitos:
 - mensagens de validação associadas aos inputs;
 - uso por teclado para fluxos principais;
 - conflitos/evidências de import legíveis sem depender apenas de cor;
-- gráficos da Bancada acompanhados de tabela/resumo acessível.
+- gráficos da Bancada acompanhados de tabela/resumo acessível;
+- ranking e motivos legíveis sem depender apenas de cor/ordem visual.
 
-## 17. Responsividade
+## 18. Responsividade
 
-Desktop é prioridade do MVP, pois comparação, builder, Bancada e revisão de imports exigem densidade de informação. Tablet deve permanecer utilizável. Mobile pode apresentar layout simplificado, mas não é requisito de paridade completa no primeiro ciclo.
+Desktop é prioridade do MVP, pois comparação, builder, Bancada, recomendação e revisão de imports exigem densidade de informação. Tablet deve permanecer utilizável. Mobile pode apresentar layout simplificado, mas não é requisito de paridade completa no primeiro ciclo.
 
-## 18. Critérios de aceite gerais
+## 19. Critérios de aceite gerais
 
 Uma funcionalidade só está concluída quando:
 
@@ -496,5 +559,8 @@ Uma funcionalidade só está concluída quando:
 - evidência de campos importados é preservada;
 - Bancada não apresenta pitch speed como velocidade real do drone;
 - grandezas de unidades incompatíveis não são visualizadas numa escala única enganosa por padrão;
+- recomendação recalcula massa por candidato e avalia hard constraints antes do score;
+- score, cobertura e confiança não são misturados;
+- ranking apresenta motivos/trade-offs;
 - identidade NEXO foi respeitada;
 - documentação foi atualizada se houve mudança de contrato.
