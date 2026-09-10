@@ -1,8 +1,8 @@
 # Roadmap — DroneCalc
 
-**Versão:** 0.6  
+**Versão:** 0.7  
 **Status:** planejamento técnico revisado  
-**Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, da persistência e da IA e evoluindo a propulsão por duas rotas: dados de bancada auditáveis e modelo físico validável.
+**Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, da persistência e da IA; evoluir a propulsão por dados de bancada/modelo físico e usar esses resultados para recomendar conjuntos de propulsão com massa recalculada e critérios orientados ao uso.
 
 ## 1. Princípios de execução
 
@@ -28,6 +28,10 @@
 - dados de bancada aplicáveis têm prioridade sobre previsões teóricas;
 - modelo teórico de propulsão só produz resultado quando houver parâmetros suficientes e sempre informa modelo, hipóteses, proveniência e confiança;
 - nunca inferir empuxo real apenas de `KV + diâmetro da hélice + tensão`;
+- recomendação final deve avaliar conjunto motor + hélice + bateria/tensão, não motor isolado;
+- a massa deve ser recalculada para cada candidato antes de avaliar hover, TWR, consumo e autonomia;
+- incompatibilidade `danger` é avaliada antes do score e nunca pode ser mascarada por ranking;
+- score de adequação, cobertura de dados e confiança são dimensões separadas;
 - `gf/W` deve ser tratado como eficiência estática de empuxo, nunca como eficiência percentual;
 - `pitch × RPM` produz apenas velocidade teórica de passo e nunca deve ser apresentado como velocidade real/máxima do drone;
 - gráficos técnicos não devem misturar grandezas de unidades incompatíveis numa única escala Y por padrão;
@@ -53,6 +57,7 @@ Entregas:
 - ingestão assistida por URL/imagens;
 - scraping controlado de fabricantes em `docs/MANUFACTURER_SCRAPING.md`;
 - workspace de dados de bancada em `docs/BENCH_DATA_WORKSPACE.md`;
+- recomendação de propulsão orientada ao uso em `docs/PROPULSION_RECOMMENDATION.md`;
 - roadmap e prompts de implementação.
 
 Critério: documentos superiores não se contradizem e qualquer IA implementadora consegue identificar a fonte normativa de cada decisão.
@@ -151,6 +156,7 @@ Critério: serviços sobem/reiniciam sem perda indevida de dados e nenhum segred
 - dry mass;
 - takeoff mass;
 - breakdown por categoria;
+- atualização ao adicionar/remover/substituir peças;
 - missing data não vira zero silenciosamente.
 
 ## Etapa 3B — Bateria básica
@@ -601,11 +607,15 @@ Entregas:
 - calibrar/limitar confiança;
 - modelo que diverge além do gate não pode ser apresentado como alta confiança.
 
-Critério de saída da Fase 7: o usuário consegue cadastrar/importar/revisar uma curva na seção Bancada, visualizar grandezas corretamente, usar dados aprovados para análise sem extrapolação silenciosa e comparar futuramente o modelo físico contra bancada real.
+Critério de saída da Fase 7: o usuário consegue cadastrar/importar/revisar uma curva na seção Bancada, visualizar grandezas corretamente, usar dados aprovados para análise sem extrapolação silenciosa e comparar o modelo físico contra bancada real quando implementado.
 
 ---
 
-# FASE 8 — Perfis, heurísticas e Candidate Generator
+# FASE 8 — Perfis, heurísticas e recomendação de propulsão
+
+**Especificação obrigatória:** `docs/PROPULSION_RECOMMENDATION.md`.
+
+A recomendação básica de propulsão é parte do fluxo principal do produto. Não deve esperar a otimização global da Fase 12.
 
 ## Etapa 8A — Knowledge/heuristic model
 
@@ -623,7 +633,8 @@ Critério de saída da Fase 7: o usuário consegue cadastrar/importar/revisar um
 - Long Range;
 - Mini Long Range;
 - Cinewhoop;
-- prioridades/targets configuráveis.
+- prioridades/targets configuráveis;
+- pesos/versionamento separados de constantes físicas.
 
 ## Etapa 8C — Sub-250 e experiência
 
@@ -632,16 +643,85 @@ Critério de saída da Fase 7: o usuário consegue cadastrar/importar/revisar um
 
 ## Etapa 8D — Candidate Generator
 
+Gerar conjuntos plausíveis, não apenas motores isolados:
+
 ```text
-heurísticas
+heurísticas/catálogo
+→ motor + hélice + bateria/tensão (+ ESC quando necessário)
 → candidatos
-→ compatibilidade
-→ cálculo/physics
-→ profile score
-→ ranking
 ```
 
-`danger` sempre elimina/penaliza de forma dominante conforme regra documentada; score não mascara incompatibilidade crítica.
+O gerador reduz o espaço de busca; não aprova fisicamente um candidato.
+
+## Etapa 8E — Perfil operacional orientado ao uso
+
+- representar pesos relativos de hover/cruzeiro/subida/agressivo/reserva quando aplicável;
+- normalizar e versionar pesos;
+- não confundir perfil operacional com planejamento de rota/missão autônoma;
+- fase sem modelo/dado não entra como consumo zero;
+- cruzeiro só recebe consumo quando houver dado/modelo defensável.
+
+## Etapa 8F — Avaliação de candidato com recálculo de massa
+
+Para cada candidato:
+
+```text
+variante virtual do projeto
+→ recalcular massa total
+→ empuxo requerido por motor
+→ TWR/reserva
+→ compatibilidade
+→ bancada/Physics Engine
+→ corrente/potência/eficiência/autonomia disponíveis
+```
+
+Requisitos:
+
+- massa dos próprios motores/hélices/bateria candidatos entra no cálculo;
+- troca de bateria recalcula simultaneamente massa, tensão, corrente e autonomia;
+- massa ausente não vira zero;
+- `danger` invalida/identifica candidato incompatível antes do score;
+- curva de bancada aplicável tem prioridade sobre modelo teórico;
+- sem dados suficientes → estado explícito.
+
+## Etapa 8G — Ranking multiobjetivo explicável
+
+- normalizar métricas antes de combinar grandezas distintas;
+- aplicar pesos do perfil de voo/uso;
+- eficiência deve ser avaliada no regime relevante, não apenas no máximo empuxo;
+- conjunto de maior empuxo não vence automaticamente;
+- `profileScore`, `dataCoverage` e `confidence` são exibidos separadamente;
+- registrar motivos positivos/negativos do ranking;
+- ranking determinístico para mesmas entradas e versões.
+
+Exemplo de saída:
+
+```text
+Motor X + Hélice A + 4S
+Massa final
+Hover/corrente
+TWR
+Eficiência
+Autonomia quando disponível
+Adequação ao perfil
+Cobertura dos dados
+Confiança
+Por que foi recomendado?
+```
+
+## Etapa 8H — Testes do recomendador
+
+Fixtures devem demonstrar:
+
+- motor mais pesado aumenta massa e hover requerido;
+- Mini Long Range pode preferir menor TWR quando eficiência/autonomia são superiores e o mínimo continua atendido;
+- Racing pode priorizar maior reserva/TWR;
+- `danger` nunca é mascarado;
+- fase operacional sem dados não é zero;
+- ranking não favorece silenciosamente candidato com dados fracos;
+- resultados e explicações são reproduzíveis.
+
+Critério de saída da Fase 8: dado um projeto com massa/componentes e candidatos tecnicamente analisáveis, o DroneCalc consegue recomendar conjuntos de propulsão de forma explicável, recalculando a massa de cada variante e respeitando o perfil de uso.
 
 ---
 
@@ -652,6 +732,7 @@ heurísticas
 - criar/abrir projeto;
 - adicionar componentes;
 - overrides de instância;
+- massa atualizada ao alterar peças;
 - resumo de massa/energia/TWR;
 - warnings.
 
@@ -659,9 +740,21 @@ heurísticas
 
 - escolha de perfil;
 - sliders/traits secundários;
+- perfil operacional quando suportado;
 - recomendações explicáveis.
 
-## Etapa 9C — Mini Long Range
+## Etapa 9C — Recomendação de conjunto de propulsão na UI
+
+- ação `Recomendar propulsão`/equivalente;
+- mostrar candidatos motor + hélice + bateria/tensão;
+- massa final específica de cada candidato;
+- hover, TWR, consumo, eficiência e autonomia quando disponíveis;
+- compatibilidade;
+- score, cobertura e confiança separados;
+- `Por que foi recomendado?`;
+- aplicar candidato somente após ação explícita do usuário.
+
+## Etapa 9D — Mini Long Range
 
 - eficiência/endurance/baixo peso/estabilidade;
 - 3.5–5\" como orientação flexível, não regra rígida;
@@ -694,13 +787,16 @@ heurísticas
 - provenance/confidence;
 - warnings;
 - configuração usada;
+- recomendação/ranking com perfil e versão quando incluído;
 - sem afirmar certificação/garantia de voo.
 
 ---
 
-# FASE 12 — Otimizador
+# FASE 12 — Otimizador global/avançado
 
-Somente após catálogo, dados e cálculo estarem maduros.
+Somente após catálogo, dados, recomendador básico e cálculo estarem maduros.
+
+A Fase 8 já entrega recomendação explicável sobre candidatos do catálogo. Esta fase amplia o problema para busca/otimização em escala.
 
 Inputs possíveis:
 
@@ -710,7 +806,16 @@ Inputs possíveis:
 - células/química;
 - perfil de voo;
 - limites de frame/hélice;
-- disponibilidade de dados confiáveis.
+- disponibilidade de dados confiáveis;
+- custo/disponibilidade futuros.
+
+Evoluções possíveis:
+
+- dimensionamento iterativo de bateria por meta;
+- exploração de grande número de combinações;
+- Pareto front;
+- otimização multiobjetivo;
+- poda/estratégias de busca eficientes.
 
 Ranking multiobjetivo deve ser explicável e nunca sobrepor incompatibilidade crítica.
 
@@ -743,7 +848,7 @@ Toda etapa deve passar por:
 7. documentação atualizada;
 8. nenhum segredo no repositório.
 
-Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/tamanho/prompt injection conforme a etapa. Para dados de bancada, adicionar testes de unidade, potência, `gf/W`, pitch speed, importação e ausência de extrapolação. Para Physics Engine, adicionar fixtures e comparação com dados reais quando disponíveis.
+Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/tamanho/prompt injection conforme a etapa. Para dados de bancada, adicionar testes de unidade, potência, `gf/W`, pitch speed, importação e ausência de extrapolação. Para Physics Engine, adicionar fixtures e comparação com dados reais quando disponíveis. Para recomendação de propulsão, testar recálculo de massa por candidato, hard constraints antes do score, uso do perfil, cobertura/confiança separadas e explicabilidade do ranking.
 
 ---
 
@@ -770,11 +875,13 @@ Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/t
                 ↓
           7F–7K Physics Engine
                 ↓
-8 Profiles/Heuristics/Candidate Generator
+8 Profiles/Heuristics/Propulsion Recommendation
                 ↓
-9 Builder/Analysis
+9 Builder/Analysis/Recommendation UI
                 ↓
-10–12 Comparison/Reports/Optimizer
+10–11 Comparison/Reports
+                ↓
+12 Advanced Global Optimizer
 ```
 
 ---
@@ -783,7 +890,7 @@ Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/t
 
 **Etapa 1A — Bootstrap full-stack e workspace.**
 
-Não antecipar PostgreSQL, MinIO, Ollama, scraping, Workspace Bancada ou Physics Engine para essa etapa. O objetivo é criar a fundação que permitirá implementar esses subsistemas sem acoplamento prematuro.
+Não antecipar PostgreSQL, MinIO, Ollama, scraping, Workspace Bancada, Physics Engine ou recomendador de propulsão para essa etapa. O objetivo é criar a fundação que permitirá implementar esses subsistemas sem acoplamento prematuro.
 
 A orientação executável está em:
 
@@ -792,5 +899,9 @@ A orientação executável está em:
 A implementação futura da seção Bancada deve seguir:
 
 `docs/prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md`
+
+A implementação futura da recomendação de propulsão deve seguir:
+
+`docs/prompts/ETAPA_8_PROPULSION_RECOMMENDATION.md`
 
 A IA implementadora pode propor estrutura alternativa mais eficaz/eficiente desde que preserve os requisitos, justifique trade-offs, implemente testes e atualize a documentação quando necessário.
