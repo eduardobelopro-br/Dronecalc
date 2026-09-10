@@ -11,20 +11,21 @@ Este diretório contém a fonte de verdade do produto e da implementação do Dr
 5. [`ARCHITECTURE.md`](ARCHITECTURE.md) — estrutura técnica e separação de responsabilidades.
 6. [`DOMAIN_MODEL.md`](DOMAIN_MODEL.md) — entidades, tipos e contratos centrais.
 7. [`CALCULATION_ENGINE.md`](CALCULATION_ENGINE.md) — fórmulas, hipóteses, proveniência e confiança.
-8. [`FLIGHT_PROFILES.md`](FLIGHT_PROFILES.md) — estilos de voo e critérios de avaliação.
-9. [`NEXO_DESIGN_SYSTEM.md`](NEXO_DESIGN_SYSTEM.md) — identidade visual herdada do NEXO.
-10. [`UX_SPEC.md`](UX_SPEC.md) — fluxos, navegação e estados de interface.
-11. [`DATA_MODEL.md`](DATA_MODEL.md) — persistência, importação/exportação e versionamento.
-12. [`COMPONENT_CATALOG.md`](COMPONENT_CATALOG.md) — categorias, campos e dados de bancada.
-13. [`TEST_STRATEGY.md`](TEST_STRATEGY.md) — testes unitários, integração e validação numérica.
-14. [`SAFETY_AND_LIMITATIONS.md`](SAFETY_AND_LIMITATIONS.md) — limites, incerteza e comunicação responsável.
-15. [`RELEASE_CRITERIA.md`](RELEASE_CRITERIA.md) — gates para etapas, MVP e releases.
-16. [`ROADMAP.md`](ROADMAP.md) — fases e dependências de implementação.
-17. [`DEVELOPMENT.md`](DEVELOPMENT.md) — padrões de desenvolvimento.
-18. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato geral para agentes de IA.
-19. [`prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`](prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md) — primeira orientação executável para a IA implementadora.
-20. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
-21. [`adr/`](adr/README.md) — Architecture Decision Records.
+8. [`PHYSICS_ENGINE.md`](PHYSICS_ENGINE.md) — modelo físico avançado de bateria, ESC, motor, torque, hélice, ponto de operação e empuxo.
+9. [`FLIGHT_PROFILES.md`](FLIGHT_PROFILES.md) — estilos de voo e critérios de avaliação.
+10. [`NEXO_DESIGN_SYSTEM.md`](NEXO_DESIGN_SYSTEM.md) — identidade visual herdada do NEXO.
+11. [`UX_SPEC.md`](UX_SPEC.md) — fluxos, navegação e estados de interface.
+12. [`DATA_MODEL.md`](DATA_MODEL.md) — persistência, importação/exportação e versionamento.
+13. [`COMPONENT_CATALOG.md`](COMPONENT_CATALOG.md) — categorias, campos e dados de bancada.
+14. [`TEST_STRATEGY.md`](TEST_STRATEGY.md) — testes unitários, integração e validação numérica.
+15. [`SAFETY_AND_LIMITATIONS.md`](SAFETY_AND_LIMITATIONS.md) — limites, incerteza e comunicação responsável.
+16. [`RELEASE_CRITERIA.md`](RELEASE_CRITERIA.md) — gates para etapas, MVP e releases.
+17. [`ROADMAP.md`](ROADMAP.md) — fases e dependências de implementação.
+18. [`DEVELOPMENT.md`](DEVELOPMENT.md) — padrões de desenvolvimento.
+19. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato geral para agentes de IA.
+20. [`prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`](prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md) — primeira orientação executável para a IA implementadora.
+21. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
+22. [`adr/`](adr/README.md) — Architecture Decision Records.
 
 Na raiz do repositório também existem:
 
@@ -41,9 +42,10 @@ O MVP ampliado adota:
 - MinIO/S3-compatible para imagens e documentos;
 - Ollama atrás de interface substituível para IA local;
 - IndexedDB apenas para cache/drafts/preferências/offline auxiliar;
-- calculation engine e domínio independentes de UI, banco e IA.
+- calculation engine e domínio independentes de UI, banco e IA;
+- duas rotas de propulsão complementares: dados de bancada como referência preferencial e Physics Engine teórico somente quando houver parâmetros suficientes.
 
-A mudança é detalhada no [`adr/0002-postgresql-object-storage-ollama.md`](adr/0002-postgresql-object-storage-ollama.md).
+A mudança de infraestrutura é detalhada no [`adr/0002-postgresql-object-storage-ollama.md`](adr/0002-postgresql-object-storage-ollama.md).
 
 ## Hierarquia de autoridade
 
@@ -51,7 +53,7 @@ Quando documentos entrarem em conflito, utilizar esta prioridade:
 
 1. `PRD.md` para intenção de produto e escopo.
 2. `PRODUCT_SPEC.md` para comportamento funcional.
-3. `CALCULATION_ENGINE.md` para regras matemáticas.
+3. `CALCULATION_ENGINE.md` para regras matemáticas gerais e `PHYSICS_ENGINE.md` para o modelo físico avançado de propulsão.
 4. `DOMAIN_MODEL.md` e `DATA_MODEL.md` para contratos de dados.
 5. `ARCHITECTURE.md` e ADRs para limites e decisões técnicas.
 6. `NEXO_DESIGN_SYSTEM.md` e `UX_SPEC.md` para apresentação e interação.
@@ -63,7 +65,8 @@ Prompts de implementação operacionalizam os documentos superiores e nunca deve
 
 Mudanças que alterem uma regra superior devem atualizar os documentos dependentes no mesmo pull request. Em especial:
 
-- fórmula alterada → `CALCULATION_ENGINE.md`, testes e changelog quando material;
+- fórmula geral alterada → `CALCULATION_ENGINE.md`, testes e changelog quando material;
+- modelo de bateria/motor/torque/hélice/propulsão alterado → `PHYSICS_ENGINE.md`, `CALCULATION_ENGINE.md` quando aplicável, fixtures físicos e testes;
 - schema alterado → `DOMAIN_MODEL.md`/`DATA_MODEL.md`, migration e testes;
 - requisito alterado → PRD/Product Spec, user stories e rastreabilidade;
 - arquitetura alterada → `ARCHITECTURE.md` e ADR;
@@ -73,7 +76,7 @@ Mudanças que alterem uma regra superior devem atualizar os documentos dependent
 
 ## Estado da especificação
 
-Versão da arquitetura/roadmap: **0.2**  
+Versão da arquitetura/roadmap: **0.3**  
 Status: **planejamento / pré-MVP**
 
 A documentação deve evoluir junto com o código. Não manter decisões relevantes apenas em issues, chats ou prompts temporários.
