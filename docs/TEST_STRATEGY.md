@@ -1,19 +1,20 @@
 # Estratégia de Testes — DroneCalc
 
-**Versão:** 0.1
+**Versão:** 0.2
 
 ## 1. Objetivo
 
-O DroneCalc produz resultados técnicos; portanto testes numéricos são parte do produto, não apenas da implementação.
+O DroneCalc produz resultados técnicos; portanto testes numéricos e testes de integridade da ingestão são parte do produto, não apenas da implementação.
 
 Prioridade:
 
 1. motor de cálculo;
 2. validação de dados;
-3. migrações/persistência;
-4. integração entre análise e projeto;
-5. UI e acessibilidade;
-6. regressão visual crítica.
+3. ingestão/staging/proveniência;
+4. migrações/persistência;
+5. integração entre análise e projeto;
+6. UI e acessibilidade;
+7. regressão visual crítica.
 
 ## 2. Pirâmide de testes
 
@@ -26,6 +27,8 @@ Prioridade:
 - scoring;
 - normalização;
 - validators;
+- parsers/extractors determinísticos;
+- reconciliação de fontes;
 - migrações puras.
 
 ### Integração
@@ -33,6 +36,9 @@ Prioridade:
 - `DroneProject` → análise completa;
 - catálogo → resolução de componente;
 - import JSON/CSV → domínio;
+- URL/import job → staging;
+- asset → object storage + metadados;
+- AI provider → schema validation → staging;
 - repository → persistência;
 - profile → scoring.
 
@@ -40,6 +46,8 @@ Prioridade:
 
 - criação de projeto;
 - adicionar/substituir componente;
+- cadastro assistido e revisão de campos extraídos;
+- exibir conflitos/evidências;
 - exibir dados ausentes;
 - abrir “Como foi calculado?”;
 - alertas;
@@ -182,6 +190,7 @@ tests/fixtures/
 ├── projects/
 ├── components/
 ├── bench-curves/
+├── ingestion/
 └── profiles/
 ```
 
@@ -192,6 +201,8 @@ Criar projetos de referência:
 - `electrical-incompatible`;
 - `missing-bench-data`;
 - `sub250-overweight`.
+
+Fixtures de ingestão devem incluir HTML/imagens de teste próprias ou licenciadas para teste, sem depender da disponibilidade de sites externos no CI.
 
 Os números esperados devem ser documentados e revisados quando a versão do motor mudar.
 
@@ -215,7 +226,7 @@ Quando alterar uma fórmula:
 - autonomia básica diminui quando corrente aumenta mantendo demais entradas;
 - TWR diminui quando massa aumenta mantendo empuxo.
 
-## 12. Importação
+## 12. Importação de arquivos
 
 Testes de JSON/CSV:
 
@@ -230,15 +241,91 @@ Testes de JSON/CSV:
 - arquivo vazio;
 - duplicatas.
 
-## 13. Persistência
+## 13. Ingestão por URL e multimodal
+
+Seguir `ASSISTED_INGESTION.md`.
+
+### Segurança de fetch
+
+Testar obrigatoriamente:
+
+- rejeição de `file:`, `ftp:` e protocolos não permitidos;
+- loopback IPv4/IPv6;
+- redes privadas/link-local;
+- redirect público → destino privado;
+- resolução/rebinding quando a implementação exigir revalidação;
+- excesso de redirects;
+- timeout;
+- payload acima do limite;
+- MIME declarado diferente do conteúdo quando detectável;
+- imagem/documento excessivamente grande;
+- quantidade excessiva de assets;
+- falha parcial sem persistência autoritativa indevida.
+
+### Extração determinística
+
+- JSON-LD válido;
+- tabela HTML;
+- unidades pt-BR/internacionais;
+- campo ausente permanece ausente;
+- valor ambíguo não vira número silenciosamente;
+- valor bruto e normalizado são preservados.
+
+### IA textual/visual
+
+Usar adapter fake/determinístico nos testes principais; não depender de um modelo Ollama real no CI unitário.
+
+Cobrir:
+
+- saída válida;
+- JSON/schema inválido;
+- campo extra não permitido;
+- timeout/cancelamento;
+- provider indisponível;
+- modelo sem capability visual;
+- imagem técnica → campos esperados no staging;
+- confidence alta não publica automaticamente;
+- prompt injection presente no conteúdo remoto não altera permissões/fluxo;
+- provider não recebe credenciais/acesso SQL.
+
+### Evidência e conflitos
+
+- campo extraído aponta para source/asset;
+- região de imagem opcional é validada quando presente;
+- HTML e imagem com mesmo valor/unidade equivalente não criam falso conflito;
+- HTML `60 mΩ` × imagem `64 mΩ` cria conflito/revisão;
+- valores diferentes sob condições distintas não são achatados em um único campo;
+- decisão de revisão mantém histórico;
+- reprocessamento por modelo diferente não sobrescreve revisão publicada.
+
+### Extraído versus derivado
+
+- `KV` extraído permanece dado da fonte;
+- `Kt` calculado recebe `formulaId`/proveniência de cálculo;
+- cálculo derivado não é persistido como declaração do fabricante;
+- warning de consistência não altera automaticamente valores importados.
+
+### Gráficos em imagem
+
+Quando digitalização for implementada:
+
+- eixos/unidades ausentes impedem promoção automática;
+- escala logarítmica é tratada explicitamente;
+- pontos ficam ligados ao asset/região/método;
+- CSV/tabela original tem preferência sobre pontos digitalizados;
+- curva digitalizada não recebe automaticamente confiança de medição alta.
+
+## 14. Persistência
 
 - save/get/list/delete;
 - autosave não perde alteração final;
 - migration mantém dados;
 - falha de storage é apresentada sem corromper estado em memória;
-- componentes referenciados não desaparecem silenciosamente.
+- componentes referenciados não desaparecem silenciosamente;
+- staging e catálogo publicado permanecem separados;
+- object storage e metadados PostgreSQL não ficam inconsistentes após falha transacional/compensação prevista.
 
-## 14. UI
+## 15. UI
 
 Testar comportamento, não implementação interna.
 
@@ -249,9 +336,10 @@ Exemplos:
 - dados insuficientes não aparecem como zero;
 - `danger` tem texto além de cor;
 - modal de fórmula tem foco correto;
-- formulário apresenta mensagem associada ao campo inválido.
+- formulário apresenta mensagem associada ao campo inválido;
+- revisão de import mostra fonte/evidência e conflito sem depender apenas de cor.
 
-## 15. Temas
+## 16. Temas
 
 Testar pelo menos:
 
@@ -261,7 +349,7 @@ Testar pelo menos:
 - persistência da preferência;
 - ausência de cores hardcoded em componentes críticos via lint/review.
 
-## 16. Cobertura
+## 17. Cobertura
 
 Cobertura percentual isolada não é objetivo suficiente. Requisito do motor:
 
@@ -269,9 +357,11 @@ Cobertura percentual isolada não é objetivo suficiente. Requisito do motor:
 - branches de validação e warnings críticos são cobertos;
 - fixtures de referência existem.
 
+Para ingestão, controles anti-SSRF, staging/publicação e validação de schema são caminhos críticos e exigem casos explícitos.
+
 Threshold automatizado pode ser adotado depois, sem substituir revisão de casos.
 
-## 17. CI futuro
+## 18. CI futuro
 
 Pipeline mínimo:
 
@@ -284,9 +374,9 @@ install
 → build
 ```
 
-Adicionar E2E conforme estabilidade.
+Adicionar E2E conforme estabilidade. Testes de ingestão não devem depender de internet pública no CI.
 
-## 18. Critério de release
+## 19. Critério de release
 
 Não liberar versão marcada como estável se:
 
@@ -294,4 +384,7 @@ Não liberar versão marcada como estável se:
 - fórmula mudou sem versão/documentação;
 - import/migration pode causar perda silenciosa;
 - análise apresenta estimativa como medição;
+- dado extraído por IA pode ser publicado sem staging/revisão prevista;
+- fetch remoto permite acesso indevido a rede interna;
+- evidência de campos importados é perdida;
 - existe regressão conhecida de compatibilidade elétrica.
