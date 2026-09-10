@@ -18,7 +18,7 @@ O produto também terá um modo orientado por **estilo de voo**, no qual o usuá
 
 ## Modos de criação
 
-1. **Por estilo de voo** — o DroneCalc coleta requisitos e sugere configurações adequadas.
+1. **Por estilo de voo** — o DroneCalc coleta requisitos e transforma o objetivo em metas técnicas.
 2. **Montagem manual** — o usuário escolhe cada componente e recebe análise contínua.
 3. **Duplicar projeto** — cria uma variante para comparar motores, hélices, baterias ou payloads.
 
@@ -56,14 +56,16 @@ Base tecnológica inicial:
 - motor matemático em TypeScript puro, sem dependência de React
 - persistência local inicialmente; banco/API podem ser adicionados quando houver necessidade real
 
-A arquitetura é intencionalmente modular para permitir evolução futura para desktop com Tauri, API, catálogo sincronizado ou otimizador de configurações.
+A arquitetura é modular para permitir evolução futura para desktop com Tauri, API, catálogo sincronizado ou otimizador de configurações.
 
 ## Documentação
 
-A documentação técnica e de produto está em [`docs/`](docs/README.md):
+O índice completo está em [`docs/README.md`](docs/README.md). Documentos principais:
 
 - [`PRD.md`](docs/PRD.md) — Product Requirements Document
 - [`PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) — especificação funcional
+- [`USER_STORIES.md`](docs/USER_STORIES.md) — histórias e critérios de aceite
+- [`REQUIREMENTS_TRACEABILITY.md`](docs/REQUIREMENTS_TRACEABILITY.md) — rastreabilidade requisito → implementação/teste
 - [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) — arquitetura e limites entre camadas
 - [`DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md) — entidades e tipos do domínio
 - [`CALCULATION_ENGINE.md`](docs/CALCULATION_ENGINE.md) — fórmulas, hipóteses e níveis de confiança
@@ -74,15 +76,26 @@ A documentação técnica e de produto está em [`docs/`](docs/README.md):
 - [`COMPONENT_CATALOG.md`](docs/COMPONENT_CATALOG.md) — categorias e campos de componentes
 - [`TEST_STRATEGY.md`](docs/TEST_STRATEGY.md) — estratégia de testes
 - [`SAFETY_AND_LIMITATIONS.md`](docs/SAFETY_AND_LIMITATIONS.md) — limites e comunicação de incerteza
+- [`RELEASE_CRITERIA.md`](docs/RELEASE_CRITERIA.md) — gates para MVP e releases
 - [`ROADMAP.md`](docs/ROADMAP.md) — fases de implementação
 - [`DEVELOPMENT.md`](docs/DEVELOPMENT.md) — padrões de desenvolvimento
-- [`AI_IMPLEMENTATION_GUIDE.md`](docs/AI_IMPLEMENTATION_GUIDE.md) — instruções para agentes de IA
+- [`AI_IMPLEMENTATION_GUIDE.md`](docs/AI_IMPLEMENTATION_GUIDE.md) — contrato e prompts para agentes de IA
+- [`GLOSSARY.md`](docs/GLOSSARY.md) — terminologia técnica
+- [`docs/adr/`](docs/adr/README.md) — decisões arquiteturais
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — contribuição
+- [`CHANGELOG.md`](CHANGELOG.md) — histórico de mudanças
+
+## Próxima etapa
+
+**Etapa 1A — Bootstrap da aplicação.**
+
+O prompt-base e um prompt específico para essa etapa já estão documentados em [`docs/AI_IMPLEMENTATION_GUIDE.md`](docs/AI_IMPLEMENTATION_GUIDE.md).
 
 ## Status
 
-**Fase atual:** especificação e fundação do projeto.
+**Fase atual:** especificação concluída para início do bootstrap / pré-MVP.
 
-A implementação deve seguir o roadmap e manter PRD, specs e decisões arquiteturais atualizados conforme o produto evoluir.
+A implementação deve seguir o roadmap e manter PRD, specs, testes e decisões arquiteturais atualizados conforme o produto evoluir.
 
 ## Repositório
 
