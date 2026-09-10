@@ -1,346 +1,537 @@
 # Roadmap — DroneCalc
 
-**Versão:** 0.1  
-**Estratégia:** construir o núcleo técnico antes de ampliar a interface e o catálogo.
+**Versão:** 0.2  
+**Status:** planejamento técnico revisado  
+**Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, da persistência e da IA.
 
-## Princípios de execução
+## 1. Princípios de execução
 
-- etapas pequenas e testáveis;
-- evitar fórmulas na UI;
-- cada fase atualiza documentação quando muda contrato;
-- não iniciar otimização antes de validar o motor básico;
-- preferir dados reais de bancada a heurísticas complexas;
+- etapas pequenas, coesas e testáveis;
+- nenhuma fórmula de engenharia dentro da UI;
+- PostgreSQL será a fonte principal de dados persistidos do produto;
+- IndexedDB poderá ser usado apenas para cache, preferências, drafts e suporte offline;
+- imagens e documentos não devem ser armazenados como blobs grandes no PostgreSQL; usar object storage compatível com S3;
+- Ollama será integrado por uma interface própria, sem dependência do domínio em um modelo específico;
+- dados extraídos por IA entram primeiro em staging e nunca são publicados automaticamente como verdade técnica;
+- importação por URL deve ser tratada como superfície de segurança e protegida contra SSRF, redirects abusivos, payloads excessivos e tipos de conteúdo inesperados;
+- preferir dados medidos e documentos de fabricante a heurísticas genéricas;
+- heurística orienta candidatos; validação física decide compatibilidade;
+- cada etapa atualiza documentação e ADR quando alterar contrato ou arquitetura;
 - manter o projeto executável ao final de cada etapa.
-
-## Etapa 0 — Especificação
-
-**Status:** documentação-base criada.
-
-Entregas:
-
-- PRD;
-- Product Spec;
-- arquitetura;
-- modelo de domínio;
-- motor de cálculo;
-- perfis de voo;
-- identidade NEXO;
-- UX;
-- dados/catálogo;
-- testes;
-- segurança;
-- padrões de desenvolvimento;
-- guia para IA.
-
-Critério de saída: escopo e contratos suficientes para iniciar bootstrap sem decisões críticas implícitas.
 
 ---
 
-## Etapa 1A — Bootstrap da aplicação
+## Etapa 0 — Especificação e decisões
 
-Objetivo: criar projeto React + TypeScript + Vite com qualidade mínima.
+**Status:** documentação-base criada e em evolução.
 
 Entregas:
 
+- PRD e Product Spec;
+- arquitetura e modelo de domínio;
+- motor de cálculo;
+- perfis de voo;
+- identidade NEXO;
+- UX, dados, catálogo, testes e segurança;
+- guia de implementação por IA;
+- ADRs de decisões estruturais.
+
+Critério de saída: decisões críticas não ficam implícitas em chat ou prompt temporário.
+
+---
+
+# FASE 1 — Fundação do repositório
+
+## Etapa 1A — Bootstrap full-stack e workspace
+
+**Objetivo:** criar a estrutura mínima do produto sem implementar ainda banco, scraping, IA ou fórmulas.
+
+Estrutura-alvo conceitual:
+
+```text
+Dronecalc/
+├── apps/
+│   ├── web/
+│   └── api/
+├── packages/
+│   ├── domain/
+│   ├── calculation-engine/
+│   └── contracts/
+├── infrastructure/
+├── docs/
+└── package.json
+```
+
+Entregas:
+
+- workspace JavaScript/TypeScript;
+- `apps/web`: React + TypeScript + Vite;
+- `apps/api`: Node.js + TypeScript com endpoint mínimo de health check;
+- `packages/domain`: pacote puro sem React/DOM/PostgreSQL/Ollama;
+- `packages/calculation-engine`: pacote puro dependente apenas de domínio/contratos necessários;
+- `packages/contracts`: contratos compartilháveis quando fizer sentido;
 - TypeScript strict;
 - lint/format;
 - Vitest;
-- estrutura de diretórios;
-- aliases;
-- scripts `dev`, `build`, `test`, `typecheck`, `lint`;
+- scripts raiz `dev`, `build`, `test`, `typecheck`, `lint`;
+- `.env.example` sem segredos;
 - CI inicial;
-- error boundary básico.
+- README atualizado com comandos reais;
+- relatório da etapa.
 
-Critério: build e testes verdes.
+**Fora de escopo:** ORM, migrations, PostgreSQL, MinIO, Ollama, scraping, catálogo real e fórmulas de drone.
+
+Critério de saída: todos os workspaces compilam, testes mínimos passam e a API responde health check.
 
 ## Etapa 1B — NEXO Design System base
 
 Entregas:
 
-- tokens NEXO sincronizados;
+- tokens NEXO sincronizados e versionados no próprio DroneCalc;
 - temas light/dark/system;
-- Button, Input, Select, Badge, Card, Alert;
+- Button, Input, Select, Badge, Card e Alert;
 - shell desktop inicial;
-- documentação da revisão NEXO usada.
+- estados de foco/acessibilidade;
+- registro da revisão NEXO usada.
 
-Critério: nenhuma feature usa cor hardcoded.
+Critério: nenhuma feature usa cor hardcoded fora do design system.
 
-## Etapa 1C — Unidades e validação física
+## Etapa 1C — Infraestrutura local com Docker
+
+**Objetivo:** disponibilizar os serviços de infraestrutura sem acoplar o domínio a eles.
+
+Serviços previstos:
+
+```text
+PostgreSQL
+MinIO
+Ollama
+```
+
+Entregas:
+
+- `docker-compose.yml` ou equivalente;
+- volumes persistentes;
+- health checks;
+- variáveis em `.env.example`;
+- credenciais locais de desenvolvimento não sensíveis/documentadas;
+- nenhuma credencial real versionada;
+- rede local mínima necessária;
+- documentação de subida/parada/limpeza;
+- testes de conectividade da API apenas quando pertinente.
+
+Não adicionar Redis, fila ou serviços extras sem problema concreto.
+
+Critério: ambiente sobe de forma reproduzível e cada serviço reporta saúde.
+
+## Etapa 1D — Unidades, validação física e contratos-base
 
 Entregas:
 
 - tipos/brands de unidades;
-- conversões massa/comprimento/capacidade;
-- parser pt-BR;
-- validações de números físicos;
-- formatters.
+- conversões de massa, comprimento, capacidade, tensão, corrente, potência e energia;
+- parser de entrada pt-BR;
+- formatters;
+- `Availability<T>`;
+- proveniência/confiança base;
+- validações de números fisicamente inválidos.
 
-Critério: suite de conversões e casos inválidos completa.
+Critério: suíte de conversões e casos inválidos completa.
 
 ---
 
-## Etapa 2 — Domínio e projetos
+# FASE 2 — Plataforma de dados
 
-### 2A — Modelos de componentes
+## Etapa 2A — PostgreSQL e migrations
 
-Implementar tipos do catálogo e schemas Zod.
+Objetivo: tornar PostgreSQL a fonte de verdade persistida.
 
-### 2B — DroneProject
+Entregas:
+
+- escolha documentada de biblioteca de acesso/migrations;
+- migration inicial;
+- convenções de IDs e timestamps;
+- transaction boundaries;
+- configuração por ambiente;
+- testes de migration em banco limpo.
+
+A biblioteca pode ser Prisma, Drizzle, query builder ou SQL tipado equivalente, desde que a escolha seja baseada em manutenção, transparência, migrations e ergonomia do código real. Não escolher por moda.
+
+## Etapa 2B — Repository interfaces e adapters
+
+Entregas:
+
+- interfaces no application/domain quando cabível;
+- implementações PostgreSQL no backend;
+- nenhum import de driver SQL no domínio;
+- testes de integração;
+- tratamento de concorrência e transações.
+
+## Etapa 2C — Object Storage
+
+Entregas:
+
+- abstração para arquivos/imagens;
+- MinIO como implementação local;
+- PostgreSQL armazena metadados e `storageKey`, não arquivos grandes;
+- hash SHA-256 para deduplicação/integridade quando útil;
+- limites de tamanho e MIME.
+
+## Etapa 2D — Cache/drafts no frontend
+
+IndexedDB fica restrito a:
+
+- draft em edição;
+- preferências;
+- último projeto;
+- cache controlado do catálogo;
+- eventual fila offline.
+
+PostgreSQL permanece fonte autoritativa quando houver conexão com backend.
+
+---
+
+# FASE 3 — Domínio, projetos e catálogo
+
+## Etapa 3A — Modelos de componentes
+
+Implementar tipos e schemas validados para:
+
+- frame;
+- motor;
+- hélice;
+- ESC;
+- bateria;
+- FC;
+- GPS;
+- receiver;
+- VTX;
+- câmera;
+- BEC/power module;
+- payload;
+- componente custom.
+
+## Etapa 3B — DroneProject
 
 - projeto;
-- instâncias de componente;
+- instâncias de componentes;
 - constraints;
 - assumptions;
-- overrides.
+- overrides por projeto;
+- duplicação/variantes.
 
-### 2C — Persistência local
+## Etapa 3C — Catálogo persistente
 
-- repositories;
-- IndexedDB;
-- migrations;
-- autosave;
-- settings.
+- CRUD;
+- busca/filtros;
+- manufacturers/models/variants;
+- source metadata;
+- revisão e completude;
+- componentes custom separados do catálogo de referência.
 
-### 2D — Import/export inicial
+## Etapa 3D — Import/export versionado
 
-- JSON versionado;
-- validação;
-- round-trip test.
+- JSON autocontido;
+- schemaVersion;
+- validação de entrada;
+- round-trip tests.
 
-Critério da etapa: criar/salvar/reabrir/duplicar um projeto vazio ou parcialmente montado.
+Critério da fase: criar, salvar, reabrir e duplicar um projeto usando componentes persistidos.
 
 ---
 
-## Etapa 3 — Massa
+# FASE 4 — Motor técnico básico
 
-### 3A — Mass engine
+## Etapa 4A — Massa
 
-- linhas;
-- categorias;
+- linhas e quantidades;
 - dry mass;
 - battery mass;
 - payload;
 - takeoff mass;
-- dados ausentes.
+- totais parciais quando faltarem dados.
 
-### 3B — UI de massa
+## Etapa 4B — Bateria
 
-- breakdown;
-- componentes sem massa;
-- percentuais;
-- métricas.
-
-Critério: fixtures manuais e automatizadas coincidem.
-
----
-
-## Etapa 4 — Bateria e sistema elétrico básico
-
-### 4A — Battery engine
-
-- tensão nominal;
-- tensão cheia;
-- Ah;
-- Wh;
+- química;
+- tensão nominal/cheia;
+- Ah/Wh;
 - C-rating derivado;
-- metadata de química.
+- corrente medida/recomendada quando disponível.
 
-### 4B — Electrical compatibility
+## Etapa 4C — Compatibilidade elétrica
 
 - bateria × ESC;
 - bateria × motor;
 - ESC × motor;
-- cargas auxiliares iniciais;
-- warnings estáveis.
-
-### 4C — UI de energia
-
-- painéis;
+- cargas auxiliares;
 - margens;
-- proveniência.
+- warnings explicáveis.
 
-Critério: incompatibilidades conhecidas são detectadas com testes de limite.
+Critério: cálculos determinísticos possuem IDs/versionamento e testes de limite.
 
 ---
 
-## Etapa 5 — Catálogo
+# FASE 5 — Cadastro assistido por URL
 
-### 5A — CRUD local de componentes
+## Etapa 5A — Source ingestion seguro
 
-- listar;
-- buscar;
-- criar custom;
-- duplicar;
-- proteger referências.
+Fluxo:
 
-### 5B — Qualidade de dados
+```text
+URL informada
+→ validação
+→ fetch controlado
+→ snapshot de evidência
+→ extração determinística
+→ staging
+```
 
-- completeness;
-- source metadata;
+Controles mínimos:
+
+- apenas HTTP/HTTPS;
+- bloqueio de IPs/hosts privados e loopback;
+- proteção contra DNS rebinding quando aplicável;
+- limite de redirects;
+- timeout;
+- tamanho máximo de resposta;
+- MIME permitido;
+- User-Agent identificável;
+- sem execução arbitrária de scripts;
+- logs sem segredos.
+
+## Etapa 5B — Extração determinística
+
+Prioridade antes de IA:
+
+1. JSON-LD;
+2. dados estruturados conhecidos;
+3. meta tags;
+4. tabelas/especificações legíveis;
+5. conteúdo textual normalizado.
+
+## Etapa 5C — Extração e validação de imagens
+
+- identificar imagens candidatas;
+- preservar URL de origem;
+- baixar somente após validação;
+- MIME e tamanho limitados;
+- hash;
+- armazenamento em MinIO;
+- aprovação humana antes de publicação quando necessário.
+
+Critério: um cadastro pode ser iniciado a partir de URL sem gravar informação não revisada como verdade técnica.
+
+---
+
+# FASE 6 — Ollama e extração assistida por IA
+
+## Etapa 6A — AI Provider abstraction
+
+Contrato conceitual:
+
+```ts
+interface AiProvider {
+  extractStructured<T>(request: StructuredExtractionRequest<T>): Promise<AiExtractionResult<T>>
+}
+```
+
+O domínio não conhece Ollama.
+
+## Etapa 6B — Ollama local
+
+- adapter HTTP;
+- modelo configurável por ambiente;
+- timeout/cancelamento;
+- saída estruturada validada por schema;
+- nenhuma confiança automática em texto do modelo;
+- registro de modelo/versão/prompt;
+- falha da IA não corrompe staging.
+
+## Etapa 6C — Review workflow
+
+Estados sugeridos:
+
+```text
+extracted
+→ needs_review
+→ approved
+→ published
+   ou rejected
+```
+
+Cada campo extraído deve poder guardar evidência e confiança.
+
+Critério: IA sugere; schema e revisão decidem.
+
+---
+
+# FASE 7 — Bench data e propulsão
+
+## Etapa 7A — Bench test model
+
+- motor + hélice + tensão/condições;
+- samples;
+- fonte;
 - revisão.
 
-### 5C — Seeds de teste
+## Etapa 7B — Importador CSV
 
-Fixtures confiáveis, não catálogo massivo.
-
-Critério: Builder pode selecionar peças do catálogo ou criar custom.
-
----
-
-## Etapa 6 — Propulsão e curvas
-
-### 6A — Bench data model
-
-- motor+hélíce+tensão;
-- samples;
-- validação.
-
-### 6B — Importador CSV
-
-- mapping;
+- mapeamento;
 - unidades;
 - preview;
-- validation.
+- validação.
 
-### 6C — Interpolação
+## Etapa 7C — Interpolação
 
 - lookup por empuxo;
 - current/power/throttle;
-- sem extrapolação.
+- sem extrapolação silenciosa.
 
-### 6D — Propulsion analysis
+## Etapa 7D — Propulsion analysis
 
 - empuxo total;
 - TWR;
 - hover thrust por motor;
 - eficiência g/W.
 
-### 6E — Curva visual
-
-- pontos medidos;
-- trecho interpolado;
-- hover marker.
-
-Critério: uma configuração com curva real/fixture produz análise de propulsão rastreável.
+Critério: resultado é rastreável até curva e amostras de origem.
 
 ---
 
-## Etapa 7 — Autonomia
-
-### 7A — Hover endurance
+# FASE 8 — Autonomia
 
 - capacidade utilizável;
 - carga auxiliar;
-- corrente interpolada;
-- estimate + confidence.
+- corrente interpolada no hover;
+- estimativa de autonomia;
+- cenários adicionais apenas com modelo defensável;
+- análise de sensibilidade.
 
-### 7B — Cenários
-
-Adicionar cruzeiro/performance somente com modelo defensável.
-
-### 7C — Sensibilidade
-
-Futuro da etapa: mostrar impacto de capacidade/massa sem chamar isso de otimização global.
-
-Critério: resultado de autonomia mostra todas as hipóteses.
+Critério: toda autonomia mostra hipóteses, fonte e confiança.
 
 ---
 
-## Etapa 8 — Perfis de voo
+# FASE 9 — Knowledge Base e heurísticas
 
-### 8A — Flight profile schema
+## Etapa 9A — Evidence / Reference Knowledge
 
-- seis perfis do MVP;
-- versões;
-- priorities.
+Armazenar conhecimento vindo de:
 
-### 8B — Wizard
+- fabricante;
+- ensaio medido;
+- usuário;
+- artigo/vídeo/referência técnica;
+- heurística curada.
 
-- escolher estilo;
-- restrições;
-- metas derivadas.
+Toda entrada carrega fonte, data, revisão e confiança.
 
-### 8C — Scoring preliminar
+## Etapa 9B — Sizing heuristics
 
-- normalização;
-- cobertura de dados;
-- penalties;
-- explicabilidade.
+Exemplo de uso:
 
-### 8D — Mini Long Range
+```text
+frame 150–165 mm
++ hélice ~4"
+→ sugerir famílias de motor 14xx–16xx como candidatos
+```
 
-Caso de validação obrigatório demonstrando que eficiência/autonomia podem superar potência máxima no ranking.
+Essas regras nunca significam “compatível” ou “seguro”.
 
-Critério: score não esconde warnings e explica contribuições.
-
----
-
-## Etapa 9 — Builder completo
-
-- layout 3 painéis;
-- component picker;
-- overrides;
-- resumo sticky;
-- análise progressiva;
-- empty states;
-- atalhos de navegação.
-
-Critério: usuário monta um quad completo sem editar JSON.
-
----
-
-## Etapa 10 — Comparador
-
-- duas ou mais variantes;
-- delta de métricas;
-- warnings;
-- score por perfil;
-- duplicar para variante.
-
-Critério: trocar bateria/motor em variante e visualizar impacto com clareza.
-
----
-
-## Etapa 11 — Centro de gravidade
-
-- Position3D;
-- CG x/y/z;
-- representação 2D inicial;
-- componentes sem posição;
-- referência do frame.
-
-Critério: fixture simétrico retorna centro e fixture assimétrico retorna deslocamento esperado.
-
----
-
-## Etapa 12 — Relatórios e compartilhamento local
-
-- export detalhado;
-- relatório técnico;
-- resumo de peças;
-- warnings;
-- fórmulas/model versions.
-
-Evitar prometer “certificação”.
-
----
-
-## Etapa 13 — Otimizador
-
-Somente após motor e perfis estabilizados.
-
-Entradas:
-
-- perfil;
-- restrições;
-- catálogo elegível.
+## Etapa 9C — Candidate Generator
 
 Pipeline:
 
 ```text
-candidatos
-→ filtros de incompatibilidade
-→ cálculos
+intenção/restrições
+→ heurísticas
+→ candidatos de catálogo
+→ filtros mecânicos/elétricos conhecidos
+→ candidatos elegíveis
+```
+
+Critério: o sistema diferencia claramente `recommended by heuristic`, `compatible` e `validated by bench data`.
+
+---
+
+# FASE 10 — Perfis de voo e scoring
+
+## Etapa 10A — Flight profile schema
+
+Perfis MVP:
+
+- Freestyle;
+- Racing;
+- Cinematic;
+- Long Range;
+- Mini Long Range;
+- Cinewhoop.
+
+## Etapa 10B — Wizard por objetivo
+
+- estilo de voo;
+- prioridade;
+- payload;
+- autonomia desejada;
+- tamanho máximo;
+- bateria preferida;
+- nível do usuário.
+
+## Etapa 10C — Scoring explicável
+
+- métricas normalizadas;
+- cobertura dos dados;
+- penalties;
+- confidence;
+- incompatibilidade `danger` nunca mascarada por score.
+
+## Etapa 10D — Caso obrigatório Mini Long Range
+
+Validar que eficiência/autonomia perto de hover/cruzeiro podem superar empuxo máximo no ranking.
+
+---
+
+# FASE 11 — Builder completo
+
+- layout técnico NEXO;
+- component picker;
+- busca no catálogo;
+- overrides;
+- resumo sticky;
+- análise progressiva;
+- warnings;
+- estados incompletos.
+
+---
+
+# FASE 12 — Comparador
+
+- variantes;
+- deltas;
+- warnings;
+- score por perfil;
+- explicação de trade-offs.
+
+---
+
+# FASE 13 — Centro de gravidade
+
+- Position3D;
+- CG x/y/z;
+- visualização 2D;
+- cálculo parcial explicitamente marcado.
+
+---
+
+# FASE 14 — Otimizador
+
+Somente após catálogo, propulsão, autonomia, heurísticas e perfis estabilizados.
+
+```text
+restrições
+→ candidate generator
+→ incompatibilidades eliminatórias
+→ cálculo técnico
 → métricas normalizadas
 → score multiobjetivo
 → ranking explicável
@@ -350,51 +541,68 @@ Requisitos:
 
 - `danger` conhecido elimina candidato;
 - dados críticos ausentes reduzem elegibilidade/confiança;
-- mostrar trade-offs;
-- não buscar apenas maior score sem explicar.
+- mostrar trade-offs e não apenas maior score;
+- resultado reproduzível por versões de perfil/motor.
 
 ---
 
-## Etapa 14 — Catálogo ampliado
+# FASE 15 — Busca semântica e pgvector
 
-- fontes/revisões;
-- importadores;
-- deduplicação;
-- testes comunitários futuros;
-- possível backend.
+Somente quando houver volume de evidências que justifique.
 
-Não coletar grande volume antes de definir governança de qualidade.
+Possíveis usos:
+
+- pesquisa em datasheets e fontes;
+- recuperação de evidências para Ollama;
+- componentes semelhantes;
+- RAG técnico com referências.
+
+PostgreSQL + pgvector deve ser tentado antes de introduzir banco vetorial separado.
 
 ---
 
-## Etapa 15 — Desktop / sincronização opcional
+# FASE 16 — Relatórios, operação e evolução
 
-Avaliar Tauri e backend somente se houver necessidade.
+- relatório técnico;
+- export de evidências;
+- observabilidade;
+- backups;
+- políticas de retenção;
+- performance de consultas;
+- eventual Tauri;
+- eventual sincronização/contas.
 
-Possíveis capacidades:
-
-- armazenamento SQLite;
-- backup/sync;
-- contas;
-- compartilhamento;
-- compute de otimização.
+Não chamar o relatório de certificação ou homologação.
 
 ---
 
 ## Dependências principais
 
 ```text
-Bootstrap
-  ├─ Design System
-  └─ Units/Domain
-       ├─ Mass
-       ├─ Battery/Electrical
-       └─ Catalog
-            └─ Bench Curves
-                 ├─ Propulsion
-                 └─ Endurance
-                      └─ Flight Profiles/Scoring
-                           └─ Optimizer
+1A Bootstrap workspace
+ ├─ 1B NEXO
+ ├─ 1C Docker services
+ └─ 1D Units/contracts
+       ↓
+2 PostgreSQL/Object Storage
+       ↓
+3 Domain/Catalog/Projects
+ ├─────────────┐
+ ↓             ↓
+4 Engine     5 URL ingestion
+ ↓             ↓
+7 Bench      6 Ollama extraction
+ ↓             ↓
+8 Endurance  9 Knowledge/Heuristics
+       └───────┬───────┘
+               ↓
+         10 Flight Profiles
+               ↓
+          11/12 UI flows
+               ↓
+          14 Optimizer
+               ↓
+        15 Semantic Search
 ```
 
 ## Definition of Done por etapa
@@ -402,14 +610,34 @@ Bootstrap
 Toda etapa deve:
 
 - compilar;
-- passar typecheck/lint/test;
-- ter testes dos novos contratos;
-- preservar dados existentes ou incluir migração;
-- atualizar docs afetadas;
-- não inserir fórmula na UI;
+- passar typecheck, lint, testes e build aplicáveis;
+- possuir testes dos novos contratos;
+- preservar comportamento não relacionado;
+- incluir migration quando schema persistido mudar;
+- atualizar documentação afetada;
+- não inserir fórmulas na UI;
 - manter identidade NEXO;
-- registrar incerteza dos resultados.
+- não armazenar segredos no repositório;
+- registrar incerteza/proveniência dos resultados;
+- fazer auto-auditoria de regressões e segurança.
+
+## Regra para melhorias propostas por IA
+
+A IA implementadora pode substituir a estrutura, biblioteca ou abordagem indicada neste roadmap se identificar solução objetivamente melhor, desde que:
+
+1. explique a limitação da abordagem original;
+2. compare trade-offs;
+3. preserve os requisitos e fronteiras arquiteturais;
+4. não amplie escopo sem necessidade;
+5. verifique documentação oficial das dependências adotadas;
+6. implemente testes equivalentes ou melhores;
+7. atualize docs/ADR quando a decisão for estrutural;
+8. registre a alteração no relatório da etapa.
 
 ## Prioridade imediata
 
-Próximo trabalho de implementação: **Etapa 1A — Bootstrap**, seguida de **1B Design System** e **1C Unidades**.
+Próxima implementação: **Etapa 1A — Bootstrap full-stack e workspace**.
+
+A orientação executável está em:
+
+`docs/prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`
