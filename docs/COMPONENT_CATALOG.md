@@ -1,12 +1,14 @@
 # Catálogo de Componentes — DroneCalc
 
-**Versão:** 0.1
+**Versão:** 0.2
 
 ## 1. Objetivo
 
 Definir categorias, campos mínimos, metadados de fonte e regras de qualidade do catálogo.
 
 O catálogo não deve apenas armazenar nomes de peças. Ele deve fornecer os dados necessários para cálculos e deixar claro quando um dado é desconhecido.
+
+O cadastro assistido por URL, imagem e documento segue `ASSISTED_INGESTION.md`.
 
 ## 2. Regras gerais
 
@@ -23,6 +25,8 @@ Todo componente possui:
 - notas/tags opcionais.
 
 Campos desconhecidos devem permanecer ausentes. Não usar zero como placeholder.
+
+Campos importados devem preservar contexto, unidade, fonte e condição quando a condição fizer parte do significado do dado.
 
 ## 3. Frame
 
@@ -41,20 +45,29 @@ Campos úteis:
 
 ## 4. Motor
 
-Campos mínimos recomendados:
+Campos mínimos/recomendados conforme disponibilidade:
 
-- massa;
+- massa e condição da medição/declarada quando relevante;
 - KV;
-- faixa de células/tensão;
-- corrente máxima contínua se declarada;
-- burst se declarado;
-- potência máxima se declarada;
-- stator;
-- shaft;
+- configuração de estator/ímãs quando declarada, por exemplo `12N14P`;
+- diâmetro e comprimento do estator;
+- faixa de células/tensão e química associada quando declarada;
+- corrente máxima contínua se declarada, preservando condições;
+- burst se declarado, com duração/condição quando conhecida;
+- potência máxima/contínua se declarada, preservando condições;
+- corrente sem carga e tensão do ensaio;
+- resistência do enrolamento/interna do motor e temperatura/condição quando conhecida;
+- `Kt` quando fornecido ou calculável, distinguindo explicitamente valor declarado de valor derivado;
+- shaft: diâmetro/tipo/oco quando aplicável;
+- dimensões externas;
 - padrão de montagem;
-- links para testes de bancada.
+- faixa/região de eficiência declarada, com corrente/tensão/condições;
+- links para testes de bancada;
+- evidências técnicas associadas.
 
-Não armazenar “empuxo máximo do motor” sem contexto de hélice/tensão. Empuxo pertence à combinação testada.
+Não armazenar “empuxo máximo do motor” sem contexto de hélice/tensão. Empuxo pertence à combinação testada/modelada.
+
+Um limite como `35 A @ 5S` não deve virar um `maxCurrentA = 35` universal sem a condição. O modelo deve permitir limites condicionais/versionados.
 
 ## 5. Hélice
 
@@ -66,18 +79,23 @@ Não armazenar “empuxo máximo do motor” sem contexto de hélice/tensão. Em
 - furo/hub;
 - direção;
 - RPM máximo quando declarado;
+- `Ct`, `Cq`, `Cp` somente quando houver fonte/convenção/condições adequadas;
+- curvas por advance ratio quando disponíveis;
 - notas.
+
+Coeficientes aerodinâmicos não podem ser inventados a partir apenas de diâmetro/pitch/número de pás.
 
 ## 6. ESC
 
 - layout individual/4-in-1;
 - massa;
 - corrente contínua por canal;
-- burst;
+- burst e duração quando declarada;
 - faixa de células/tensão;
 - quantidade de saídas;
 - protocolos;
 - BEC integrado, se houver;
+- eficiência quando conhecida;
 - dados térmicos relevantes, se conhecidos.
 
 ## 7. Bateria
@@ -93,7 +111,7 @@ Não armazenar “empuxo máximo do motor” sem contexto de hélice/tensão. Em
 - corrente contínua medida/recomendada quando disponível;
 - massa;
 - conector;
-- resistência interna quando medida;
+- resistência interna quando medida, com condição/temperatura/SOC quando conhecida;
 - dimensões opcionais.
 
 ## 8. Flight Controller
@@ -210,7 +228,9 @@ Amostra:
 throttle % | thrust | current | voltage | power | rpm
 ```
 
-Power pode ser calculado se não fornecido.
+Power pode ser calculado se não fornecido, mas deve ser marcado como derivado.
+
+Curvas digitalizadas de gráfico em imagem devem indicar explicitamente essa origem e não receber automaticamente o mesmo nível de confiança de um CSV/tabela de ensaio original.
 
 ## 19. Qualidade de dados
 
@@ -227,13 +247,13 @@ Apenas identificação/massa ou poucos campos.
 
 A UI deve indicar completude sem confundir com confiabilidade da fonte.
 
-## 20. Fonte
+## 20. Fonte e evidência
 
-Metadados de fonte:
+Metadados de fonte de alto nível:
 
 ```ts
 interface SourceMetadata {
-  kind: 'measured' | 'manufacturer' | 'user-provided' | 'other'
+  kind: 'measured' | 'manufacturer' | 'user-provided' | 'article' | 'video' | 'other'
   sourceName?: string
   sourceUrl?: string
   reference?: string
@@ -244,9 +264,13 @@ interface SourceMetadata {
 
 “Manufacturer” não significa necessariamente “medido pelo DroneCalc”.
 
+Para campos extraídos automaticamente, a evidência deve poder indicar adicionalmente HTML/tabela/imagem/documento, asset, método (`deterministic`, `ai-text`, `ai-vision`, `user`), confiança da extração e estado de revisão. Ver `ASSISTED_INGESTION.md`.
+
 ## 21. Revisões
 
 Se o fabricante altera especificações ou há variantes com mesmo nome, preservar revisão/identificador específico. Não substituir histórico silenciosamente.
+
+Reprocessar uma página/imagem com modelo de IA diferente não sobrescreve silenciosamente uma revisão publicada.
 
 ## 22. Componentes personalizados
 
@@ -267,25 +291,54 @@ Prioridade inicial para seeds:
 - alguns exemplos reais somente quando a fonte estiver registrada;
 - curvas de bancada verificáveis para validar o motor.
 
-## 24. Importação futura de fontes externas
+## 24. Importação de fontes externas
 
 Qualquer importer deve:
 
 - mapear campos explicitamente;
-- converter unidades;
-- preservar fonte;
+- converter unidades de forma determinística;
+- preservar valor bruto e fonte;
+- manter evidência por campo quando disponível;
 - identificar duplicatas;
+- detectar conflitos entre HTML, imagem e documento;
 - não inventar campos;
+- não transformar cálculo derivado em especificação declarada;
 - registrar revisão/import date;
-- passar por validação de schema.
+- passar por validação de schema;
+- gravar primeiro em staging;
+- exigir o workflow de revisão/publicação definido em `ASSISTED_INGESTION.md`.
 
-## 25. Critérios de aceite
+## 25. Dados extraídos versus derivados
+
+Exemplo:
+
+```text
+KV = 1860
+kind = extracted
+source = manufacturer/image
+```
+
+pode alimentar posteriormente:
+
+```text
+Kt ≈ função(KV)
+kind = calculated
+formulaId = MOTOR_KV_TO_KT_V1
+```
+
+O segundo valor pertence ao calculation/physics engine e não deve ser apresentado como se estivesse escrito na ficha do fabricante.
+
+## 26. Critérios de aceite
 
 - componentes têm IDs estáveis;
-- nenhum empuxo sem contexto motor+hélíce+tensão;
+- nenhum empuxo sem contexto motor+hélíce+tensão/modelo;
 - unidade é conhecida;
 - fonte é armazenável;
+- evidência de campo é preservável para imports automáticos;
 - desconhecido é distinto de zero;
 - custom e catálogo são distinguíveis;
 - testes de bancada suportam múltiplas fontes;
-- dados inválidos não entram no domínio.
+- limites condicionais preservam suas condições;
+- dados extraídos por IA não entram diretamente no catálogo publicado;
+- dados inválidos não entram no domínio;
+- valores derivados são semanticamente distintos de valores declarados/extraídos.
