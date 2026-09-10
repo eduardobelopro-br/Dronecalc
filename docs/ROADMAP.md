@@ -1,8 +1,8 @@
 # Roadmap — DroneCalc
 
-**Versão:** 0.2  
+**Versão:** 0.3  
 **Status:** planejamento técnico revisado  
-**Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, da persistência e da IA.
+**Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, da persistência e da IA e evoluindo a propulsão por duas rotas: dados de bancada e modelo físico validável.
 
 ## 1. Princípios de execução
 
@@ -16,6 +16,9 @@
 - importação por URL deve ser tratada como superfície de segurança e protegida contra SSRF, redirects abusivos, payloads excessivos e tipos de conteúdo inesperados;
 - preferir dados medidos e documentos de fabricante a heurísticas genéricas;
 - heurística orienta candidatos; validação física decide compatibilidade;
+- dados de bancada aplicáveis têm prioridade sobre previsões teóricas;
+- modelo teórico de propulsão só produz resultado quando houver parâmetros suficientes e sempre informa modelo, hipóteses, proveniência e confiança;
+- nunca inferir empuxo real apenas de `KV + diâmetro da hélice + tensão`;
 - cada etapa atualiza documentação e ADR quando alterar contrato ou arquitetura;
 - manter o projeto executável ao final de cada etapa.
 
@@ -30,6 +33,7 @@ Entregas:
 - PRD e Product Spec;
 - arquitetura e modelo de domínio;
 - motor de cálculo;
+- Physics Engine para bateria/motor/torque/hélice/propulsão;
 - perfis de voo;
 - identidade NEXO;
 - UX, dados, catálogo, testes e segurança;
@@ -129,14 +133,14 @@ Critério: ambiente sobe de forma reproduzível e cada serviço reporta saúde.
 Entregas:
 
 - tipos/brands de unidades;
-- conversões de massa, comprimento, capacidade, tensão, corrente, potência e energia;
+- conversões de massa, comprimento, capacidade, tensão, corrente, potência, energia, força, torque, velocidade angular e rotação;
 - parser de entrada pt-BR;
 - formatters;
 - `Availability<T>`;
 - proveniência/confiança base;
 - validações de números fisicamente inválidos.
 
-Critério: suíte de conversões e casos inválidos completa.
+Critério: suíte de conversões e casos inválidos completa, incluindo RPM ↔ rad/s e N·m.
 
 ---
 
@@ -210,6 +214,8 @@ Implementar tipos e schemas validados para:
 - BEC/power module;
 - payload;
 - componente custom.
+
+Os modelos de motor/hélice/bateria devem permitir adicionar posteriormente parâmetros físicos opcionais sem inventar defaults: resistência interna, corrente sem carga, `Kt`, coeficientes `Ct/Cq/Cp`, curvas por advance ratio e condições de ensaio.
 
 ## Etapa 3B — DroneProject
 
@@ -366,7 +372,9 @@ Critério: IA sugere; schema e revisão decidem.
 
 ---
 
-# FASE 7 — Bench data e propulsão
+# FASE 7 — Bench data, propulsão e Physics Engine
+
+Esta fase possui duas rotas complementares. A rota empírica baseada em bancada é preferida quando existe ensaio aplicável. A rota teórica só é usada quando há parâmetros suficientes e nunca deve fabricar coeficientes ou precisão.
 
 ## Etapa 7A — Bench test model
 
@@ -388,7 +396,7 @@ Critério: IA sugere; schema e revisão decidem.
 - current/power/throttle;
 - sem extrapolação silenciosa.
 
-## Etapa 7D — Propulsion analysis
+## Etapa 7D — Propulsion analysis por bancada
 
 - empuxo total;
 - TWR;
@@ -397,18 +405,126 @@ Critério: IA sugere; schema e revisão decidem.
 
 Critério: resultado é rastreável até curva e amostras de origem.
 
+## Etapa 7E — Contratos do Physics Engine
+
+**Especificação obrigatória:** `docs/PHYSICS_ENGINE.md`.
+
+Entregas:
+
+- contratos SI para força, torque, RPM/velocidade angular e densidade do ar;
+- `PhysicsContext`;
+- estado operacional de bateria;
+- parâmetros eletromecânicos do motor;
+- parâmetros/coefs de hélice;
+- `PropulsionOperatingPoint`;
+- IDs e versionamento dos modelos;
+- política de seleção `bench data > modelo físico > dados insuficientes`.
+
+Nenhuma fórmula avançada deve ser implementada antes de seus contratos, unidades e casos de teste estarem definidos.
+
+## Etapa 7F — Bateria sob carga
+
+Implementar de forma incremental:
+
+- tensão de circuito aberto quando disponível;
+- resistência interna do pack;
+- modelo de sag equivalente de Thévenin inicial;
+- potência entregue;
+- margem para cutoff;
+- SOC/temperatura apenas quando houver dados/modelo defensável.
+
+Proibido usar C-rating como substituto de resistência interna.
+
+## Etapa 7G — Modelo eletromecânico do motor
+
+Implementar:
+
+- conversão `KV ↔ Kt` com convenções explícitas;
+- RPM ↔ rad/s;
+- modelo DC equivalente versionado;
+- back-EMF;
+- corrente/torque;
+- `P_mech = τ × ω`;
+- eficiência quando os dados forem coerentes;
+- limites e validações.
+
+A aproximação de motor DC equivalente deve ser identificada como modelo, não como medição de um BLDC real.
+
+## Etapa 7H — Modelo aerodinâmico da hélice
+
+Primeiro modelo permitido: coeficientes adimensionais conhecidos.
+
+```text
+T = Ct × ρ × n² × D⁴
+Q = Cq × ρ × n² × D⁵
+P = Cp × ρ × n³ × D⁵
+```
+
+Entregas:
+
+- regime estático;
+- densidade do ar como contexto;
+- `Ct/Cq/Cp` com origem e convenção;
+- advance ratio `J` preparado para evolução;
+- validação de unidades/coeficientes.
+
+Se existirem apenas diâmetro, pitch e número de pás sem coeficientes/curva/geometria suficiente, retornar dados insuficientes ou baixa confiança conforme modelo explicitamente calibrado. Não inventar `Ct/Cq/Cp`.
+
+## Etapa 7I — Solver do ponto de operação motor × hélice
+
+Resolver o equilíbrio:
+
+```text
+τ_motor(ω, V, ...) = Q_propeller(ω, ρ, V_forward, ...)
+```
+
+Requisitos:
+
+- intervalo físico limitado;
+- solver determinístico;
+- tolerância e limite de iterações explícitos;
+- detecção de ausência de raiz;
+- falha de convergência não produz resultado válido;
+- método bracketed robusto quando aplicável;
+- versão do solver registrada.
+
+Saídas esperadas:
+
+- RPM;
+- corrente;
+- torque;
+- empuxo;
+- potência elétrica;
+- potência mecânica quando disponível;
+- eficiência;
+- proveniência/confiança.
+
+## Etapa 7J — Validação e reconciliação bancada × modelo
+
+- fixtures físicos versionados;
+- comparar previsão com ensaios reais;
+- erro absoluto/relativo por regime;
+- não alterar dado medido para “encaixar” no modelo;
+- permitir calibração versionada separada;
+- reduzir confiança fora do domínio validado;
+- selecionar automaticamente curva medida quando aplicável.
+
+Critério de saída da Fase 7: o DroneCalc consegue usar dados reais de bancada como rota preferencial e, quando eles faltarem mas existirem parâmetros físicos suficientes, produzir uma estimativa teórica rastreável de bateria → motor → torque → hélice → ponto de operação → empuxo. Se nenhuma rota for defensável, retorna `dados insuficientes`.
+
 ---
 
 # FASE 8 — Autonomia
 
 - capacidade utilizável;
 - carga auxiliar;
-- corrente interpolada no hover;
+- corrente interpolada no hover quando houver bancada;
+- corrente do Physics Engine quando a rota teórica for válida;
+- tensão sob carga/sag quando o modelo estiver disponível;
 - estimativa de autonomia;
 - cenários adicionais apenas com modelo defensável;
 - análise de sensibilidade.
 
-Critério: toda autonomia mostra hipóteses, fonte e confiança.
+Critério: toda autonomia mostra hipóteses, fonte, modelo e confiança.
 
 ---
 
@@ -450,7 +566,7 @@ intenção/restrições
 → candidatos elegíveis
 ```
 
-Critério: o sistema diferencia claramente `recommended by heuristic`, `compatible` e `validated by bench data`.
+Critério: o sistema diferencia claramente `recommended by heuristic`, `compatible`, `modelled` e `validated by bench data`.
 
 ---
 
@@ -510,7 +626,8 @@ Validar que eficiência/autonomia perto de hover/cruzeiro podem superar empuxo m
 - deltas;
 - warnings;
 - score por perfil;
-- explicação de trade-offs.
+- explicação de trade-offs;
+- distinguir resultados medidos, interpolados e modelados.
 
 ---
 
@@ -542,7 +659,8 @@ Requisitos:
 - `danger` conhecido elimina candidato;
 - dados críticos ausentes reduzem elegibilidade/confiança;
 - mostrar trade-offs e não apenas maior score;
-- resultado reproduzível por versões de perfil/motor.
+- resultado reproduzível por versões de perfil/motor;
+- candidatos baseados apenas em modelo teórico devem ser distinguidos daqueles validados por bancada.
 
 ---
 
@@ -589,20 +707,24 @@ Não chamar o relatório de certificação ou homologação.
 3 Domain/Catalog/Projects
  ├─────────────┐
  ↓             ↓
-4 Engine     5 URL ingestion
- ↓             ↓
-7 Bench      6 Ollama extraction
- ↓             ↓
-8 Endurance  9 Knowledge/Heuristics
-       └───────┬───────┘
-               ↓
-         10 Flight Profiles
-               ↓
-          11/12 UI flows
-               ↓
-          14 Optimizer
-               ↓
-        15 Semantic Search
+4 Basic       5 URL ingestion
+Engine          ↓
+ ↓            6 Ollama extraction
+7A–7D Bench      │
+ └──────┐        │
+        ↓        │
+7E–7J Physics Engine
+        ↓        │
+8 Endurance     9 Knowledge/Heuristics
+       └─────────┬─────────┘
+                 ↓
+          10 Flight Profiles
+                 ↓
+            11/12 UI flows
+                 ↓
+            14 Optimizer
+                 ↓
+          15 Semantic Search
 ```
 
 ## Definition of Done por etapa
@@ -619,11 +741,13 @@ Toda etapa deve:
 - manter identidade NEXO;
 - não armazenar segredos no repositório;
 - registrar incerteza/proveniência dos resultados;
+- versionar modelos físicos que alterem resultados;
+- validar invariantes de unidades, potência, torque e eficiência quando aplicáveis;
 - fazer auto-auditoria de regressões e segurança.
 
 ## Regra para melhorias propostas por IA
 
-A IA implementadora pode substituir a estrutura, biblioteca ou abordagem indicada neste roadmap se identificar solução objetivamente melhor, desde que:
+A IA implementadora pode substituir a estrutura, biblioteca, solver ou abordagem indicada neste roadmap se identificar solução objetivamente melhor, desde que:
 
 1. explique a limitação da abordagem original;
 2. compare trade-offs;
@@ -632,7 +756,8 @@ A IA implementadora pode substituir a estrutura, biblioteca ou abordagem indicad
 5. verifique documentação oficial das dependências adotadas;
 6. implemente testes equivalentes ou melhores;
 7. atualize docs/ADR quando a decisão for estrutural;
-8. registre a alteração no relatório da etapa.
+8. registre a alteração no relatório da etapa;
+9. para modelos físicos, valide numericamente contra casos de referência e, quando disponível, bancada real.
 
 ## Prioridade imediata
 
@@ -641,3 +766,7 @@ Próxima implementação: **Etapa 1A — Bootstrap full-stack e workspace**.
 A orientação executável está em:
 
 `docs/prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`
+
+A implementação futura de torque/propulsão avançada deve seguir:
+
+`docs/PHYSICS_ENGINE.md`
