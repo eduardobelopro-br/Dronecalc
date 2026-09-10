@@ -1,6 +1,6 @@
 # Roadmap — DroneCalc
 
-**Versão:** 0.3  
+**Versão:** 0.4  
 **Status:** planejamento técnico revisado  
 **Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, da persistência e da IA e evoluindo a propulsão por duas rotas: dados de bancada e modelo físico validável.
 
@@ -13,7 +13,10 @@
 - imagens e documentos não devem ser armazenados como blobs grandes no PostgreSQL; usar object storage compatível com S3;
 - Ollama será integrado por uma interface própria, sem dependência do domínio em um modelo específico;
 - dados extraídos por IA entram primeiro em staging e nunca são publicados automaticamente como verdade técnica;
-- importação por URL deve ser tratada como superfície de segurança e protegida contra SSRF, redirects abusivos, payloads excessivos e tipos de conteúdo inesperados;
+- campos extraídos de imagens/documentos devem manter evidência rastreável e método de extração;
+- valores extraídos e valores derivados pelo motor de cálculo são semanticamente distintos;
+- conflitos HTML × imagem × documento nunca são resolvidos silenciosamente;
+- importação por URL deve ser tratada como superfície de segurança e protegida contra SSRF, redirects abusivos, payloads excessivos, tipos de conteúdo inesperados e prompt injection indireta;
 - preferir dados medidos e documentos de fabricante a heurísticas genéricas;
 - heurística orienta candidatos; validação física decide compatibilidade;
 - dados de bancada aplicáveis têm prioridade sobre previsões teóricas;
@@ -34,6 +37,7 @@ Entregas:
 - arquitetura e modelo de domínio;
 - motor de cálculo;
 - Physics Engine para bateria/motor/torque/hélice/propulsão;
+- ingestão assistida multimodal por URL/imagens/documentos;
 - perfis de voo;
 - identidade NEXO;
 - UX, dados, catálogo, testes e segurança;
@@ -278,7 +282,9 @@ Critério: cálculos determinísticos possuem IDs/versionamento e testes de limi
 
 ---
 
-# FASE 5 — Cadastro assistido por URL
+# FASE 5 — Cadastro assistido por URL e assets
+
+**Especificação obrigatória:** `docs/ASSISTED_INGESTION.md`.
 
 ## Etapa 5A — Source ingestion seguro
 
@@ -296,15 +302,17 @@ URL informada
 Controles mínimos:
 
 - apenas HTTP/HTTPS;
-- bloqueio de IPs/hosts privados e loopback;
+- bloqueio de IPs/hosts privados, link-local e loopback;
 - proteção contra DNS rebinding quando aplicável;
+- revalidação após redirects;
 - limite de redirects;
 - timeout;
 - tamanho máximo de resposta;
 - MIME permitido;
 - User-Agent identificável;
 - sem execução arbitrária de scripts;
-- logs sem segredos.
+- logs sem segredos;
+- conteúdo remoto tratado como input hostil, nunca como instrução para o agente.
 
 ## Etapa 5B — Extração determinística
 
@@ -316,25 +324,44 @@ Prioridade antes de IA:
 4. tabelas/especificações legíveis;
 5. conteúdo textual normalizado.
 
-## Etapa 5C — Extração e validação de imagens
+Preservar valor bruto, valor normalizado, unidade, fonte e método de extração.
 
-- identificar imagens candidatas;
+## Etapa 5C — Descoberta, classificação e armazenamento de assets
+
+- identificar imagens/documentos candidatos;
+- classificar quando possível: produto, ficha técnica, tabela, desenho dimensional, diagrama/pinout, gráfico, etiqueta ou irrelevante;
 - preservar URL de origem;
-- baixar somente após validação;
-- MIME e tamanho limitados;
-- hash;
-- armazenamento em MinIO;
+- baixar somente após validação anti-SSRF;
+- validar MIME real, tamanho e dimensões;
+- limitar quantidade de assets por import job;
+- hash SHA-256;
+- armazenamento em MinIO/S3-compatible;
+- metadados e `storageKey` no PostgreSQL;
 - aprovação humana antes de publicação quando necessário.
 
-Critério: um cadastro pode ser iniciado a partir de URL sem gravar informação não revisada como verdade técnica.
+## Etapa 5D — Staging e evidência por campo
+
+- `import_jobs`/equivalente;
+- `extracted_fields`;
+- vínculo campo → source/asset;
+- método de extração;
+- região de imagem opcional quando defensável;
+- estado de revisão;
+- separação entre catálogo publicado e staging.
+
+Critério: um cadastro pode ser iniciado a partir de URL, assets ficam auditáveis e nenhuma informação não revisada é gravada como verdade técnica publicada.
 
 ---
 
 # FASE 6 — Ollama e extração assistida por IA
 
+**Especificação obrigatória:** `docs/ASSISTED_INGESTION.md`.
+
 ## Etapa 6A — AI Provider abstraction
 
-Contrato conceitual:
+Contrato deve suportar saída estruturada e evoluir para multimodal sem acoplar o domínio ao Ollama.
+
+Contrato conceitual inicial:
 
 ```ts
 interface AiProvider {
@@ -342,19 +369,40 @@ interface AiProvider {
 }
 ```
 
-O domínio não conhece Ollama.
+A IA implementadora pode adotar contrato multimodal unificado se for mais simples/robusto, desde que preserve substituibilidade, validação de schema e testabilidade.
 
 ## Etapa 6B — Ollama local
 
 - adapter HTTP;
 - modelo configurável por ambiente;
+- capability detection;
 - timeout/cancelamento;
 - saída estruturada validada por schema;
 - nenhuma confiança automática em texto do modelo;
 - registro de modelo/versão/prompt;
-- falha da IA não corrompe staging.
+- falha da IA não corrompe staging;
+- modelo sem visão não pode fingir análise visual.
 
-## Etapa 6C — Review workflow
+## Etapa 6C — Extração multimodal/vision
+
+- analisar fichas técnicas, tabelas, desenhos dimensionais, etiquetas e outros assets elegíveis;
+- extrair somente campos previstos no schema da categoria;
+- preservar asset/evidência e valor bruto;
+- normalização de unidade fora do modelo quando determinística;
+- condições fazem parte do dado, por exemplo `35 A @ 5S`;
+- confidence da IA não equivale a aprovação;
+- prompt injection em texto/imagem/documento não altera permissões ou workflow.
+
+## Etapa 6D — Reconciliação cross-source
+
+- comparar HTML × JSON-LD × tabela × imagem × documento;
+- normalizar unidades antes de comparar;
+- considerar variante/revisão/condição;
+- valores divergentes geram conflito `needs_review`;
+- não escolher silenciosamente o maior confidence;
+- checks determinísticos podem apontar inconsistência (`P = V × I` etc.), mas não corrigem a fonte automaticamente.
+
+## Etapa 6E — Review workflow
 
 Estados sugeridos:
 
@@ -368,7 +416,22 @@ extracted
 
 Cada campo extraído deve poder guardar evidência e confiança.
 
-Critério: IA sugere; schema e revisão decidem.
+Valor extraído e valor derivado são distintos. Exemplo: `KV` lido da ficha permanece dado de fonte; `Kt` calculado pertence ao Physics Engine com `formulaId`.
+
+## Etapa 6F — Gráficos/curvas em imagem (incremental)
+
+Pode ser adiada sem bloquear o cadastro multimodal básico.
+
+Quando implementada:
+
+- identificar eixos, unidades, escala e legenda;
+- marcar pontos como `digitized-from-image` ou equivalente;
+- guardar asset/região/método;
+- não promover automaticamente para medição de alta confiança;
+- preferir CSV/tabela original quando existir;
+- exigir revisão humana antes de alimentar cálculos de alta confiança.
+
+Critério da fase: IA sugere dados textuais/visuais estruturados com evidência; schema, reconciliação e revisão decidem o que é publicado.
 
 ---
 
@@ -707,9 +770,9 @@ Não chamar o relatório de certificação ou homologação.
 3 Domain/Catalog/Projects
  ├─────────────┐
  ↓             ↓
-4 Basic       5 URL ingestion
+4 Basic       5 URL/assets ingestion
 Engine          ↓
- ↓            6 Ollama extraction
+ ↓            6 Ollama + Vision + Review
 7A–7D Bench      │
  └──────┐        │
         ↓        │
@@ -741,13 +804,15 @@ Toda etapa deve:
 - manter identidade NEXO;
 - não armazenar segredos no repositório;
 - registrar incerteza/proveniência dos resultados;
+- preservar evidência para dados importados automaticamente;
+- impedir publicação direta de dados brutos de IA;
 - versionar modelos físicos que alterem resultados;
 - validar invariantes de unidades, potência, torque e eficiência quando aplicáveis;
 - fazer auto-auditoria de regressões e segurança.
 
 ## Regra para melhorias propostas por IA
 
-A IA implementadora pode substituir a estrutura, biblioteca, solver ou abordagem indicada neste roadmap se identificar solução objetivamente melhor, desde que:
+A IA implementadora pode substituir a estrutura, biblioteca, solver, provider ou abordagem indicada neste roadmap se identificar solução objetivamente melhor, desde que:
 
 1. explique a limitação da abordagem original;
 2. compare trade-offs;
@@ -757,7 +822,8 @@ A IA implementadora pode substituir a estrutura, biblioteca, solver ou abordagem
 6. implemente testes equivalentes ou melhores;
 7. atualize docs/ADR quando a decisão for estrutural;
 8. registre a alteração no relatório da etapa;
-9. para modelos físicos, valide numericamente contra casos de referência e, quando disponível, bancada real.
+9. para modelos físicos, valide numericamente contra casos de referência e, quando disponível, bancada real;
+10. para ingestão/IA, não enfraqueça staging, evidência, schema validation, anti-SSRF ou isolamento contra prompt injection.
 
 ## Prioridade imediata
 
@@ -770,3 +836,7 @@ A orientação executável está em:
 A implementação futura de torque/propulsão avançada deve seguir:
 
 `docs/PHYSICS_ENGINE.md`
+
+A implementação futura de cadastro por URL/imagens/documentos deve seguir:
+
+`docs/ASSISTED_INGESTION.md`
