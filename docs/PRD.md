@@ -1,6 +1,6 @@
 # PRD — DroneCalc
 
-**Versão:** 0.2  
+**Versão:** 0.3  
 **Status:** pré-MVP  
 **Produto:** DroneCalc  
 **Repositório:** `eduardobelopro-br/Dronecalc`
@@ -22,6 +22,7 @@ Os principais problemas são:
 - dificuldade de comparar variantes de projeto;
 - estimativas de autonomia frequentemente pouco transparentes;
 - uso incorreto de valores de KV, corrente, C-rating e tensão;
+- interpretação incorreta de dados de bancada, como confundir `gf/W` com eficiência percentual ou pitch speed com velocidade real do drone;
 - falta de rastreabilidade da origem de um resultado;
 - recomendações genéricas que ignoram o objetivo de voo;
 - dificuldade para iniciantes entenderem por que uma configuração é ou não adequada.
@@ -34,6 +35,7 @@ O produto se diferencia por:
 
 - combinar cálculo e catálogo de componentes;
 - permitir cadastro assistido a partir de URL com extração de HTML, imagens e documentos técnicos;
+- oferecer uma seção Bancada para cadastrar, revisar e visualizar curvas motor+hélíce;
 - separar dado medido, dado de fabricante, dado extraído, cálculo, interpolação e estimativa;
 - preservar evidência e revisão para dados importados;
 - calcular com unidades canônicas e converter apenas na apresentação;
@@ -70,7 +72,8 @@ O usuário deve conseguir:
 - entender se há empuxo suficiente;
 - estimar autonomia em cenários diferentes;
 - comparar duas ou mais configurações;
-- importar dados de bancada;
+- cadastrar/importar e revisar dados de bancada;
+- visualizar curvas de empuxo, corrente, potência, RPM e eficiência estática com unidades explícitas;
 - cadastrar componentes não existentes no catálogo;
 - informar a página de um equipamento e obter um cadastro técnico pré-preenchido a partir de texto, tabelas, imagens e documentos disponíveis;
 - revisar conflitos e evidências antes de publicar dados extraídos no catálogo;
@@ -95,12 +98,14 @@ Além disso, o MVP ampliado deve oferecer:
 - catálogo persistente inicial;
 - cadastro assistido por URL com staging/revisão;
 - extração multimodal quando o provider/modelo configurado suportar visão;
+- seção Bancada para curvas motor+hélíce e integração com análise;
+- importação de CSV/tabela de bancada com preview e unidades explícitas;
 - análise de compatibilidade;
 - comparação de variantes;
 - PostgreSQL como fonte persistente principal;
 - cache/drafts locais auxiliares;
 - tema claro/escuro seguindo NEXO;
-- testes automatizados do motor matemático e do pipeline crítico de ingestão.
+- testes automatizados do motor matemático, da Bancada e do pipeline crítico de ingestão.
 
 ## 7. Fora do escopo do MVP
 
@@ -117,7 +122,8 @@ Não fazem parte do primeiro MVP:
 - cálculo regulatório automático por país;
 - marketplace;
 - otimização global de milhares de combinações em servidor;
-- sincronização multiusuário.
+- sincronização multiusuário;
+- previsão de velocidade real/máxima da aeronave baseada apenas em pitch e RPM.
 
 Esses itens podem ser avaliados após o núcleo matemático estar validado.
 
@@ -161,6 +167,12 @@ Na área de catálogo, o usuário pode informar uma URL. O sistema coleta de for
 
 A IA pode auxiliar na extração textual e visual, mas não publica diretamente no catálogo. O usuário/revisor deve conseguir ver evidência, conflitos e estado de revisão.
 
+### 8.5 Dados de bancada
+
+Na área Bancada, o usuário pode criar um ensaio manualmente, importar CSV/tabela ou revisar curvas recebidas pelo pipeline de ingestão.
+
+O sistema deve preservar condições, unidades, fonte e estado de revisão por ensaio/amostra. Valores derivados devem ser identificados como cálculo, não como medição.
+
 ## 9. Requisitos funcionais de alto nível
 
 ### RF-01 — Projetos
@@ -200,13 +212,16 @@ Comparar ao menos duas variantes lado a lado.
 Aceitar e exibir unidades comuns sem misturar unidades internamente.
 
 ### RF-13 — Persistência
-Persistir projetos, catálogo, revisões, evidências e staging no backend PostgreSQL; IndexedDB/local storage ficam restritos a cache/drafts/preferências/offline auxiliar.
+Persistir projetos, catálogo, revisões, evidências, staging e dados de bancada no backend PostgreSQL; IndexedDB/local storage ficam restritos a cache/drafts/preferências/offline auxiliar.
 
 ### RF-14 — Importação/exportação
 Suportar formato JSON versionado; CSV será usado principalmente para tabelas de bancada.
 
 ### RF-15 — Cadastro assistido multimodal
 Permitir iniciar cadastro de equipamento por URL, extrair primeiro fontes estruturadas e, quando necessário, usar IA para texto/imagens/documentos. Todo campo de IA deve passar por schema, staging e revisão antes de publicação. Conflitos entre fontes não podem ser resolvidos silenciosamente.
+
+### RF-16 — Workspace Bancada
+Permitir cadastrar, importar, revisar, visualizar e utilizar curvas de bancada motor+hélíce. A seção deve distinguir throttle, tensão, corrente, potência, empuxo, RPM e eficiência estática; derivar `P = V × I` e `gf/W` apenas com entradas defensáveis; tratar `pitch × RPM` somente como **velocidade teórica de passo**; não extrapolar curvas silenciosamente; e disponibilizar curvas aprovadas para análise de propulsão/hover/autonomia.
 
 ## 10. Requisitos não funcionais
 
@@ -217,13 +232,13 @@ Mesmas entradas e mesma versão do motor devem produzir os mesmos resultados.
 O motor matemático não pode depender de React ou DOM.
 
 ### RNF-03 — Rastreabilidade
-Cálculos críticos devem registrar fórmula/modelo, entradas e versão do algoritmo. Imports automáticos devem registrar fonte, método e evidência por campo quando aplicável.
+Cálculos críticos devem registrar fórmula/modelo, entradas e versão do algoritmo. Imports automáticos e dados de bancada devem registrar fonte, método e evidência/proveniência quando aplicável.
 
 ### RNF-04 — Performance
 Alterações simples do projeto devem atualizar a análise sem atraso perceptível em hardware desktop comum. Processos de ingestão/IA podem ser assíncronos e devem expor estado/progresso adequado.
 
 ### RNF-05 — Acessibilidade
-Navegação por teclado, foco visível, contraste adequado e semântica ARIA nos controles relevantes.
+Navegação por teclado, foco visível, contraste adequado e semântica ARIA nos controles relevantes. Gráficos de bancada devem possuir tabela/resumo acessível.
 
 ### RNF-06 — Internacionalização
 Código não deve depender de texto em português para regras de negócio. UI inicial pode ser pt-BR.
@@ -246,6 +261,10 @@ Antes de chamar o MVP de estável:
 - importação inválida não pode corromper projetos existentes;
 - dado extraído por IA não pode ser publicado sem o workflow de staging/revisão;
 - controles críticos anti-SSRF e validação de schema possuem testes explícitos;
+- curvas de bancada não podem extrapolar silenciosamente;
+- `gf/W` deve aparecer com semântica/unidade explícita;
+- pitch speed teórica não pode ser apresentada como velocidade real/máxima do drone;
+- gráficos de bancada não devem usar escala única enganosa para grandezas incompatíveis;
 - perfis de voo devem ser configuráveis por dados, não por condicionais espalhadas na UI.
 
 ## 12. Experiência desejada
@@ -253,6 +272,8 @@ Antes de chamar o MVP de estável:
 O usuário deve conseguir começar pelo **objetivo**, não pela terminologia técnica. Ao mesmo tempo, um usuário avançado deve conseguir acessar todos os parâmetros, substituir valores e visualizar a origem do cálculo.
 
 No catálogo, o usuário deve poder colar a página do equipamento e revisar um cadastro pré-preenchido, com indicação clara do que veio de HTML, imagem/documento, IA, cálculo ou edição humana.
+
+Na Bancada, o usuário deve conseguir ler a curva sem ambiguidades de unidade e abrir a origem de cada valor ou cálculo derivado.
 
 Princípio de UX: **resumo simples na superfície; engenharia detalhada sob demanda**.
 
@@ -263,12 +284,14 @@ O MVP ampliado está pronto quando um usuário consegue:
 1. criar um projeto Mini Long Range ou outro perfil;
 2. selecionar/cadastrar frame, motores, hélices, ESC e bateria;
 3. iniciar o cadastro de um componente por URL e revisar dados extraídos, inclusive de imagem quando houver provider visual configurado;
-4. ver peso e energia atualizados automaticamente;
-5. carregar uma curva de bancada compatível;
-6. obter empuxo/peso e autonomia estimada quando os dados permitirem;
-7. receber alertas elétricos explicáveis;
-8. duplicar a configuração e comparar uma bateria ou motor diferente;
-9. fechar e reabrir a aplicação sem perder o projeto/dados persistidos.
+4. criar/importar e revisar uma curva de bancada motor+hélíce na seção Bancada;
+5. visualizar corrente, potência, empuxo, RPM e `gf/W` com unidades e proveniência;
+6. ver peso e energia atualizados automaticamente;
+7. carregar/usar uma curva de bancada compatível sem extrapolação silenciosa;
+8. obter empuxo/peso e autonomia estimada quando os dados permitirem;
+9. receber alertas elétricos explicáveis;
+10. duplicar a configuração e comparar uma bateria ou motor diferente;
+11. fechar e reabrir a aplicação sem perder o projeto/dados persistidos.
 
 ## 14. Riscos de produto
 
@@ -277,10 +300,12 @@ O MVP ampliado está pronto quando um usuário consegue:
 - páginas externas podem conter conteúdo malicioso/prompt injection ou tentar explorar o fetcher;
 - C-rating pode superestimar desempenho real da bateria;
 - uma combinação motor/hélice não pode ser inferida com boa precisão apenas por KV e tensão;
+- curvas de bancada podem conter unidades ambíguas, tensão ausente ou valores derivados incorretamente rotulados;
+- pitch speed pode ser confundida com velocidade real do drone;
 - autonomia depende de aerodinâmica, temperatura, vento, eficiência de ESC/motor e perfil de pilotagem;
 - usuários podem interpretar uma estimativa como garantia de segurança.
 
-Mitigação: proveniência, evidência por campo, staging/revisão, validação de schema, controles anti-SSRF/prompt injection, confiança, mensagens de limitação, preferência por dados medidos e validação de entrada.
+Mitigação: proveniência, evidência por campo, staging/revisão, validação de schema, controles anti-SSRF/prompt injection, confiança, mensagens de limitação, preferência por dados medidos, unidades explícitas e validação de entrada.
 
 ## 15. Futuro do produto
 
