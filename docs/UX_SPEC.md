@@ -1,6 +1,6 @@
 # UX Spec — DroneCalc
 
-**Versão:** 0.1
+**Versão:** 0.2
 
 ## 1. Princípio de experiência
 
@@ -17,9 +17,10 @@ Navegação principal:
 - Análise;
 - Comparador;
 - Catálogo;
+- Bancada;
 - Configurações.
 
-No contexto de um projeto, Builder e Análise são as áreas centrais.
+No contexto de um projeto, Builder e Análise são as áreas centrais. Bancada é um workspace técnico para curvas motor+hélíce e deve ser acessível também a partir de componentes e da análise de propulsão.
 
 ## 3. Dashboard de projetos
 
@@ -184,6 +185,8 @@ Seções:
 8. Perfil de voo;
 9. Dados e confiança.
 
+Na seção Propulsão, quando uma curva de bancada tiver sido utilizada, deve existir ação **Abrir curva usada** que leva à seção Bancada preservando o contexto do ensaio.
+
 ## 11. “Como foi calculado?”
 
 Toda métrica calculada abre detalhe com:
@@ -257,6 +260,69 @@ Lista de componentes com:
 
 Componentes customizados devem ser distinguíveis dos dados de fabricante/importados.
 
+No detalhe de motores e hélices, disponibilizar `Ver testes de bancada` quando existirem curvas associadas e `Adicionar teste` quando o usuário tiver permissão para cadastrar dados.
+
+## 14.1 Bancada
+
+A seção **Bancada** é normatizada por `BENCH_DATA_WORKSPACE.md`.
+
+Objetivos de UX:
+
+- visualizar claramente a combinação motor + hélice + condições do ensaio;
+- cadastrar/editar amostras;
+- importar CSV/tabela com preview;
+- revisar dados vindos de scraping/IA antes de aprovação;
+- distinguir visualmente valor medido/declarado de valor calculado/interpolado;
+- permitir auditoria da fonte de cada dado;
+- mostrar warnings de unidade/consistência sem modificar silenciosamente a fonte.
+
+Layout desktop sugerido:
+
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│ Bancada — Motor X + Hélice Y                                    │
+│ Condições / fonte / status                         [Importar CSV] │
+├────────────────────────────────┬─────────────────────────────────┤
+│ Tabela de amostras             │ Resumo do ponto selecionado     │
+│ Throttle | V | A | W | gf ...  │ Empuxo / Corrente / RPM / gf/W │
+├────────────────────────────────┴─────────────────────────────────┤
+│ Gráficos técnicos separados por grandeza/unidade                │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+Tabela recomendada:
+
+```text
+Throttle (%)
+Tensão (V)
+Corrente (A)
+Potência (W)
+Empuxo (gf/N)
+RPM
+Eficiência estática (gf/W)
+Velocidade teórica de passo (km/h) [opcional]
+Fonte/status
+```
+
+Regras visuais obrigatórias:
+
+- não chamar `throttle %` de aceleração física;
+- não chamar `gf/W` apenas de “Eficiência” sem unidade;
+- não mostrar pitch speed como velocidade real ou máxima do drone;
+- não usar por padrão uma única escala Y para A, gf, RPM e gf/W;
+- gráficos recomendados: empuxo × throttle; corrente/potência × throttle; RPM × throttle; eficiência estática × throttle/empuxo;
+- pontos medidos e interpolados devem ser distinguíveis;
+- a tabela permanece representação acessível/auditável dos dados;
+- valor derivado abre `Como foi calculado?`.
+
+Microcopy obrigatória para pitch speed:
+
+```text
+Velocidade teórica de passo
+Não representa a velocidade real da aeronave; ignora slip, arrasto,
+advance ratio e outros efeitos aerodinâmicos.
+```
+
 ## 15. Entrada numérica
 
 Regras:
@@ -271,15 +337,17 @@ Regras:
 
 ## 16. Estados de carregamento/persistência
 
-Como MVP é local, operações devem ser rápidas, mas ainda prever:
+Operações devem prever:
 
 - salvando;
 - salvo;
 - falha ao salvar;
 - importando;
-- importação inválida.
+- importação inválida;
+- aguardando revisão;
+- conflito de fonte quando aplicável.
 
-Não bloquear toda a aplicação por autosave.
+Não bloquear toda a aplicação por autosave. O backend/PostgreSQL é a persistência autoritativa quando online; IndexedDB serve apenas aos casos definidos na arquitetura.
 
 ## 17. Empty states
 
@@ -291,11 +359,18 @@ Adicione motor, hélice e uma curva de bancada compatível.
 [Selecionar motor] [Adicionar teste]
 ```
 
+Exemplo em Bancada:
+
+```text
+Nenhuma curva de bancada cadastrada para esta combinação.
+[Adicionar teste] [Importar CSV]
+```
+
 Empty state deve orientar o próximo passo.
 
 ## 18. Educação contextual
 
-Termos como KV, C-rating, TWR e g/W podem ter tooltips/links “Entenda”.
+Termos como KV, C-rating, TWR, g/W e pitch speed podem ter tooltips/links “Entenda”.
 
 Explicação curta primeiro; conteúdo aprofundado pode ser expandido.
 
@@ -319,13 +394,16 @@ Inicialmente:
 - modal prende foco e devolve foco ao fechar;
 - elementos clicáveis usam semântica correta;
 - status não depende apenas de cor;
-- gráficos têm resumo textual/tabela acessível.
+- gráficos têm resumo textual/tabela acessível;
+- tabela de bancada deve expor cabeçalhos/unidades semanticamente.
 
 ## 21. Responsividade
 
 Desktop: layout completo com painéis paralelos.  
 Tablet: sidebar recolhível e resumo técnico abaixo/overlay controlado.  
 Mobile: foco em consulta/edição simples; comparador e tabelas podem usar scroll horizontal. Paridade mobile total não é requisito do MVP.
+
+A seção Bancada pode priorizar visualização/tabela no mobile e reservar edição de alta densidade para desktop/tablet.
 
 ## 22. Microcopy
 
@@ -334,7 +412,9 @@ Preferir linguagem técnica clara:
 - “Dados insuficientes” em vez de “Erro” quando falta informação;
 - “Estimado” sempre que houver modelo;
 - “Máximo declarado pelo fabricante” em vez de “Máximo seguro”;
-- “Verificação não disponível” em vez de “Compatível” quando campos faltarem.
+- “Verificação não disponível” em vez de “Compatível” quando campos faltarem;
+- “Eficiência estática (gf/W)” em vez de “Eficiência” para a razão empuxo/potência;
+- “Velocidade teórica de passo” em vez de “Velocidade” para `pitch × RPM`.
 
 ## 23. Critérios de aceite UX
 
@@ -345,4 +425,7 @@ Preferir linguagem técnica clara:
 - dados ausentes são distinguíveis de zero;
 - tema claro/escuro preserva legibilidade;
 - ações destrutivas são confirmadas;
-- qualquer score possui explicação acessível.
+- qualquer score possui explicação acessível;
+- Bancada diferencia dados medidos, declarados, calculados e interpolados;
+- pitch speed nunca é apresentada como velocidade real da aeronave;
+- gráficos de bancada não misturam grandezas incompatíveis numa única escala por padrão.
