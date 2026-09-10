@@ -1,20 +1,21 @@
 # Estratégia de Testes — DroneCalc
 
-**Versão:** 0.2
+**Versão:** 0.3
 
 ## 1. Objetivo
 
-O DroneCalc produz resultados técnicos; portanto testes numéricos e testes de integridade da ingestão são parte do produto, não apenas da implementação.
+O DroneCalc produz resultados técnicos; portanto testes numéricos, testes da Bancada e testes de integridade da ingestão são parte do produto, não apenas da implementação.
 
 Prioridade:
 
 1. motor de cálculo;
-2. validação de dados;
-3. ingestão/staging/proveniência;
-4. migrações/persistência;
-5. integração entre análise e projeto;
-6. UI e acessibilidade;
-7. regressão visual crítica.
+2. validação de dados e unidades;
+3. dados/curvas de bancada;
+4. ingestão/staging/proveniência;
+5. migrações/persistência;
+6. integração entre análise e projeto;
+7. UI e acessibilidade;
+8. regressão visual crítica.
 
 ## 2. Pirâmide de testes
 
@@ -22,6 +23,9 @@ Prioridade:
 
 - conversões;
 - fórmulas;
+- potência `V × I`;
+- eficiência estática `gf/W`;
+- pitch speed teórica;
 - interpolação;
 - compatibilidade;
 - scoring;
@@ -35,6 +39,8 @@ Prioridade:
 
 - `DroneProject` → análise completa;
 - catálogo → resolução de componente;
+- bench test aprovado → lookup/interpolação → análise;
+- import CSV de bancada → preview → validação → persistência;
 - import JSON/CSV → domínio;
 - URL/import job → staging;
 - asset → object storage + metadados;
@@ -46,6 +52,7 @@ Prioridade:
 
 - criação de projeto;
 - adicionar/substituir componente;
+- seção Bancada: tabela, edição/importação, warnings, proveniência e gráficos;
 - cadastro assistido e revisão de campos extraídos;
 - exibir conflitos/evidências;
 - exibir dados ausentes;
@@ -110,7 +117,35 @@ Nunca arredondar cedo dentro do cálculo intermediário sem necessidade física/
 
 - V × A;
 - entradas medidas;
-- zero/negativos inválidos conforme contexto.
+- zero/negativos inválidos conforme contexto;
+- potência declarada/medida divergente de `V × I` gera warning sem sobrescrever fonte.
+
+### Bancada — eficiência estática
+
+- empuxo `gf` + potência W → `gf/W`;
+- divisão por zero bloqueada;
+- potência ausente indisponibiliza cálculo;
+- valor é rotulado com unidade;
+- não é convertido para percentual;
+- origem `calculated` quando derivado.
+
+### Bancada — pitch speed
+
+- `pitch_in → pitch_m`;
+- `pitch_m × RPM → m/min`;
+- conversão correta para km/h;
+- pitch zero/inválido conforme contrato;
+- RPM negativo inválido;
+- resultado sempre identificado como **Velocidade teórica de passo**;
+- teste de UI impede rótulo `Velocidade máxima`/`Velocidade do drone` para essa fórmula;
+- aviso `PITCH_SPEED_NOT_AIRCRAFT_SPEED` ou equivalente permanece visível/contextual.
+
+### Bancada — RPM sem carga
+
+- `KV × V` como referência ideal;
+- não usado como RPM carregado;
+- RPM de bancada pode ser comparado à referência apenas com tolerância/semântica adequada;
+- `loaded_rpm_ratio` não é chamado de eficiência automaticamente.
 
 ### TWR
 
@@ -128,7 +163,9 @@ Nunca arredondar cedo dentro do cálculo intermediário sem necessidade física/
 - alvo fora da faixa;
 - dados duplicados;
 - curva não ordenada;
-- amostra inválida.
+- amostra inválida;
+- ponto interpolado preserva referência aos pontos de origem;
+- nenhum caminho padrão extrapola silenciosamente.
 
 ### Hover
 
@@ -136,7 +173,8 @@ Nunca arredondar cedo dentro do cálculo intermediário sem necessidade física/
 - required thrust encontrado exato;
 - required thrust interpolado;
 - fora da curva;
-- motor count inválido.
+- motor count inválido;
+- lookup por empuxo não assume linearidade de throttle.
 
 ### Autonomia
 
@@ -154,11 +192,11 @@ Nunca arredondar cedo dentro do cálculo intermediário sem necessidade física/
 - 3 eixos;
 - posição ausente.
 
-## 7. Compatibilidade
+## 7. Compatibilidade e warnings
 
 Cada código de warning deve ter testes independentes.
 
-Exemplos:
+Exemplos gerais:
 
 - `BATTERY_ESC_VOLTAGE_EXCEEDED`;
 - `MOTOR_VOLTAGE_EXCEEDED`;
@@ -168,7 +206,19 @@ Exemplos:
 - `PROP_FRAME_DIAMETER_EXCEEDED`;
 - `INSUFFICIENT_DATA_*`.
 
-Testar limites exatamente iguais, imediatamente abaixo e imediatamente acima.
+Warnings esperados para Bancada incluem equivalentes a:
+
+- `BENCH_VOLTAGE_MISSING`;
+- `BENCH_POWER_INCONSISTENT`;
+- `BENCH_EFFICIENCY_UNIT_AMBIGUOUS`;
+- `BENCH_THRUST_UNIT_AMBIGUOUS`;
+- `BENCH_RPM_EXCEEDS_NO_LOAD_REFERENCE`;
+- `BENCH_SAMPLE_DUPLICATE`;
+- `BENCH_SAMPLE_INVALID`;
+- `BENCH_INTERPOLATION_OUT_OF_RANGE`;
+- `PITCH_SPEED_NOT_AIRCRAFT_SPEED`.
+
+Testar limites exatamente iguais, imediatamente abaixo e imediatamente acima quando a regra tiver threshold.
 
 ## 8. Perfis e scoring
 
@@ -194,15 +244,21 @@ tests/fixtures/
 └── profiles/
 ```
 
-Criar projetos de referência:
+Criar projetos/curvas de referência:
 
 - `minimal-valid-quad`;
 - `mini-long-range-reference`;
 - `electrical-incompatible`;
 - `missing-bench-data`;
-- `sub250-overweight`.
+- `sub250-overweight`;
+- `bench-valid-with-voltage`;
+- `bench-missing-voltage`;
+- `bench-ambiguous-units`;
+- `bench-interpolation-out-of-range`.
 
 Fixtures de ingestão devem incluir HTML/imagens de teste próprias ou licenciadas para teste, sem depender da disponibilidade de sites externos no CI.
+
+Não copiar planilhas/imagens de terceiros como fixture redistribuível sem verificar permissão. Quando uma referência externa inspirar um caso, criar fixture sintética equivalente.
 
 Os números esperados devem ser documentados e revisados quando a versão do motor mudar.
 
@@ -222,11 +278,13 @@ Quando alterar uma fórmula:
 
 - massa total não diminui ao adicionar massa positiva;
 - energia Wh cresce linearmente com capacidade mantendo tensão;
+- potência DC cresce linearmente com corrente mantendo tensão;
+- pitch speed teórica cresce linearmente com RPM mantendo pitch;
 - interpolação retorna valor entre extremos para curva monotônica;
 - autonomia básica diminui quando corrente aumenta mantendo demais entradas;
 - TWR diminui quando massa aumenta mantendo empuxo.
 
-## 12. Importação de arquivos
+## 12. Importação de arquivos e Bancada
 
 Testes de JSON/CSV:
 
@@ -241,9 +299,19 @@ Testes de JSON/CSV:
 - arquivo vazio;
 - duplicatas.
 
+Para CSV de bancada, cobrir adicionalmente:
+
+- preview antes de persistir;
+- cancelamento não altera o banco;
+- cabeçalho `Aceleração` pode exigir mapeamento para `throttlePercent`, sem alterar semântica física;
+- `Empuxo (100g)` é tratado como unidade/escala ambígua até confirmação/regra confiável;
+- coluna `Eficiência` sem unidade não é assumida automaticamente como percentual nem `gf/W`;
+- tensão ausente não é substituída por nominal silenciosamente;
+- power/efficiency derivados só aparecem quando entradas válidas existem.
+
 ## 13. Ingestão por URL e multimodal
 
-Seguir `ASSISTED_INGESTION.md`.
+Seguir `ASSISTED_INGESTION.md` e `MANUFACTURER_SCRAPING.md`.
 
 ### Segurança de fetch
 
@@ -323,6 +391,7 @@ Quando digitalização for implementada:
 - falha de storage é apresentada sem corromper estado em memória;
 - componentes referenciados não desaparecem silenciosamente;
 - staging e catálogo publicado permanecem separados;
+- bench test e samples mantêm integridade referencial;
 - object storage e metadados PostgreSQL não ficam inconsistentes após falha transacional/compensação prevista.
 
 ## 15. UI
@@ -337,7 +406,12 @@ Exemplos:
 - `danger` tem texto além de cor;
 - modal de fórmula tem foco correto;
 - formulário apresenta mensagem associada ao campo inválido;
-- revisão de import mostra fonte/evidência e conflito sem depender apenas de cor.
+- revisão de import mostra fonte/evidência e conflito sem depender apenas de cor;
+- Bancada mostra tabela com unidades e estado/proveniência;
+- valor derivado abre explicação da fórmula;
+- pitch speed aparece como teórica e com aviso;
+- não existe gráfico padrão colocando A, gf, RPM e `gf/W` numa única escala Y;
+- pontos interpolados são distinguíveis dos medidos.
 
 ## 16. Temas
 
@@ -356,6 +430,8 @@ Cobertura percentual isolada não é objetivo suficiente. Requisito do motor:
 - 100% das fórmulas/regras críticas possuem casos explícitos;
 - branches de validação e warnings críticos são cobertos;
 - fixtures de referência existem.
+
+Para Bancada, `V × I`, `gf/W`, pitch speed, unidade ambígua, tensão ausente e bloqueio de extrapolação são caminhos críticos.
 
 Para ingestão, controles anti-SSRF, staging/publicação e validação de schema são caminhos críticos e exigem casos explícitos.
 
@@ -384,6 +460,10 @@ Não liberar versão marcada como estável se:
 - fórmula mudou sem versão/documentação;
 - import/migration pode causar perda silenciosa;
 - análise apresenta estimativa como medição;
+- Bancada apresenta `gf/W` como percentual;
+- pitch speed é apresentada como velocidade real/máxima do drone;
+- curva pode extrapolar silenciosamente;
+- gráfico de bancada usa escala única enganosa para grandezas incompatíveis por padrão;
 - dado extraído por IA pode ser publicado sem staging/revisão prevista;
 - fetch remoto permite acesso indevido a rede interna;
 - evidência de campos importados é perdida;
