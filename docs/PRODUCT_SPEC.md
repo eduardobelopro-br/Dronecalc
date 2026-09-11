@@ -1,6 +1,6 @@
 # Product Spec — DroneCalc
 
-**Versão:** 0.4  
+**Versão:** 0.5  
 **Status:** pré-MVP
 
 Este documento descreve o comportamento funcional esperado. O PRD define o porquê; este documento define **o que a aplicação deve fazer**.
@@ -10,8 +10,8 @@ Este documento descreve o comportamento funcional esperado. O PRD define o porqu
 A aplicação terá seis áreas principais:
 
 1. **Projetos** — lista, criação, duplicação e gerenciamento.
-2. **Builder** — montagem do drone por componentes e acesso à recomendação de propulsão.
-3. **Análise** — resultados técnicos e alertas.
+2. **Builder** — montagem do drone por componentes, acesso à recomendação de propulsão e contexto do sistema FPV.
+3. **Análise** — resultados técnicos, alertas e acesso ao cálculo de alcance FPV.
 4. **Comparador** — comparação de variantes.
 5. **Catálogo** — componentes, cadastro assistido, evidências e dados de fabricante.
 6. **Bancada** — curvas motor+hélíce, amostras, importação, validação, visualização e integração com análise.
@@ -43,6 +43,7 @@ Campos iniciais:
 - opção sub-250 g;
 - payload adicional;
 - autonomia desejada opcional;
+- distância FPV desejada opcional;
 - tamanho de hélice preferido/opcional;
 - número de motores, inicialmente 4 por padrão, editável;
 - química/tensão da bateria opcional;
@@ -64,9 +65,11 @@ Categorias mínimas do MVP:
 - ESC;
 - bateria;
 - flight controller;
-- receptor;
+- receptor de controle;
 - GPS;
 - VTX;
+- VRX/óculos quando usado como referência de projeto;
+- antena FPV;
 - câmera FPV;
 - câmera de gravação;
 - cabos/conectores;
@@ -84,7 +87,7 @@ Cada item adicionado deve exibir:
 
 A massa do projeto deve ser recalculada sempre que uma peça for adicionada, removida, substituída ou tiver quantidade/massa alterada. Componente sem massa conhecida não pode ser tratado silenciosamente como `0 g`.
 
-O Builder deve oferecer acesso à recomendação de propulsão quando existirem dependências suficientes para avaliar candidatos.
+O Builder deve oferecer acesso à recomendação de propulsão quando existirem dependências suficientes para avaliar candidatos e deve permitir reutilizar VTX/antena selecionados no cálculo de alcance FPV.
 
 ## 4. Análise progressiva
 
@@ -96,8 +99,9 @@ Exemplos:
 - se bateria estiver disponível, calcular energia;
 - se motor/ESC estiverem disponíveis, validar corrente/tensão conforme dados existentes;
 - se curva motor+hélíce estiver disponível, liberar empuxo e autonomia mais confiável;
-- se não houver curva, permitir estimativa apenas quando existir um modelo explicitamente suportado e parâmetros suficientes, marcando confiança adequada;
-- se houver componentes suficientes para gerar candidatos, permitir recomendação parcial/completa conforme cobertura dos dados.
+- se não houver curva, permitir estimativa apenas quando existir modelo explicitamente suportado e parâmetros suficientes;
+- se houver componentes suficientes para gerar candidatos, permitir recomendação parcial/completa conforme cobertura;
+- se houver dados RF suficientes, permitir link budget FPV mesmo que o projeto ainda esteja incompleto em outras áreas.
 
 Nunca preencher dados técnicos ausentes silenciosamente.
 
@@ -154,6 +158,21 @@ Quando solicitada e suportada:
 - confiança;
 - motivos do ranking.
 
+### Alcance FPV
+Quando solicitado e suportado:
+- distância-alvo;
+- frequência/canal;
+- FSPL;
+- potência recebida estimada;
+- sensibilidade utilizada e condição;
+- margem disponível;
+- margem desejada;
+- headroom residual;
+- potência teórica mínima de VTX;
+- EIRP quando calculável;
+- distância teórica máxima em espaço livre;
+- warnings e limitações.
+
 ## 6. Proveniência e confiança
 
 Todo `CalculationResult` deve possuir:
@@ -184,7 +203,7 @@ A UI deve permitir abrir “Como foi calculado?”.
 
 Dados de catálogo extraídos automaticamente também devem permitir abrir sua evidência/origem, sem confundir confiança da extração com confiança física do dado.
 
-Para rankings, `profileScore`, `dataCoverage` e `confidence` devem ser apresentados separadamente.
+Para rankings, `profileScore`, `dataCoverage` e `confidence` devem ser apresentados separadamente. Para RF, a confiança final deve refletir sensibilidade, ganho/perdas e hipóteses utilizadas.
 
 ## 7. Alertas de compatibilidade
 
@@ -205,17 +224,9 @@ Cada alerta deve conter:
 - recomendação objetiva quando possível;
 - código estável para testes e traduções.
 
-Exemplo:
+Uma incompatibilidade `danger` não pode ser compensada por score alto no recomendador.
 
-```text
-ESC_CURRENT_MARGIN_LOW
-Motor: 31 A
-ESC contínuo: 35 A
-Margem: 12,9%
-Severidade: warning
-```
-
-Uma incompatibilidade `danger` não pode ser compensada por score de perfil alto no recomendador.
+Warnings RF devem distinguir falta de dados, margem insuficiente, semântica de ganho desconhecida, polarização, modelo de espaço livre e status regulatório não verificado.
 
 ## 8. Comparador
 
@@ -233,7 +244,8 @@ Métricas iniciais:
 - autonomia;
 - número e severidade dos alertas;
 - score do perfil de voo, quando disponível;
-- cobertura/confiança quando a comparação usar dados de qualidades diferentes.
+- cobertura/confiança quando a comparação usar dados de qualidades diferentes;
+- link budget FPV quando frequência, distância e condições forem comparáveis.
 
 O comparador não deve declarar um “vencedor” sem explicar o critério.
 
@@ -262,7 +274,9 @@ A primeira versão suporta:
 - `mini-long-range`;
 - `cinewhoop`.
 
-O sistema pode associar um perfil operacional versionado para ponderar regimes como hover/cruzeiro/subida/agressivo/reserva quando houver dados físicos defensáveis. Isso não é planejamento de rota/missão autônoma.
+O sistema pode associar um perfil operacional versionado para ponderar regimes de uso quando houver dados físicos defensáveis. Isso não é planejamento de rota/missão autônoma.
+
+A distância FPV desejada pode ser uma constraint/intenção separada; perfis Long Range/Mini Long Range não devem inventar uma distância automaticamente.
 
 ## 10. Mini Long Range
 
@@ -279,7 +293,9 @@ Prioriza:
 
 Tamanho de hélice pode ter faixa preferida, mas não deve ser regra absoluta. A opção sub-250 g é uma restrição separada.
 
-O score de Mini Long Range não pode favorecer empuxo máximo de forma desproporcional. Eficiência e energia útil devem pesar mais que potência bruta. Um candidato com menor TWR pode superar outro no ranking quando ambos atendem ao mínimo e o primeiro apresenta melhor compromisso de eficiência, autonomia e massa.
+O score de Mini Long Range não pode favorecer empuxo máximo de forma desproporcional. Um candidato com menor TWR pode superar outro quando ambos atendem ao mínimo e o primeiro apresenta melhor compromisso de eficiência, autonomia e massa.
+
+Alcance FPV desejado pode ser analisado separadamente, sem fundir link de vídeo com link de controle.
 
 ## 11. Catálogo
 
@@ -332,17 +348,7 @@ O comportamento detalhado é normatizado por `ASSISTED_INGESTION.md` e `MANUFACT
 
 A aplicação deve poder utilizar imagens como fonte de dados quando o provider configurado possuir capacidade visual. Exemplos: ficha técnica, tabela, desenho dimensional, etiqueta e gráfico.
 
-Para cada campo extraído visualmente, o sistema deve preservar, quando disponível:
-
-- asset de origem;
-- valor bruto;
-- valor normalizado;
-- unidade;
-- método de extração;
-- modelo/provider;
-- confiança da extração;
-- região da imagem opcional;
-- estado de revisão.
+Para cada campo extraído visualmente, o sistema deve preservar asset, valor bruto/normalizado, unidade, método, provider/modelo, confiança e estado de revisão.
 
 Modelo sem visão deve informar indisponibilidade, não fingir análise.
 
@@ -352,21 +358,24 @@ Se HTML, imagem ou documento divergirem, mostrar conflito para revisão. Não es
 
 ### 11.5 Extraído versus derivado
 
-Exemplo: `KV = 1860` lido da ficha é dado extraído. `Kt` calculado a partir desse KV é dado derivado pelo Physics Engine e deve registrar fórmula/versão. A UI e persistência não podem apresentá-los como se ambos tivessem sido declarados pelo fabricante.
+Exemplo: `KV = 1860` lido da ficha é dado extraído. `Kt` calculado a partir desse KV é derivado pelo Physics Engine e deve registrar fórmula/versão.
+
+### 11.6 Catálogo RF
+
+Categorias mínimas adicionais:
+
+- VTX;
+- VRX/FPV goggles;
+- FPV antenna;
+- RF cable/pigtail opcional.
+
+Campos relevantes seguem `FPV_LINK_BUDGET.md`, incluindo frequência, potência, sensibilidade condicionada, ganho e `gainKind`, SWR, polarização e perdas de cabos/conectores.
 
 ## 12. Bancada e testes de propulsão
 
 A seção **Bancada** é uma área própria da aplicação e deve seguir `BENCH_DATA_WORKSPACE.md`.
 
-Um conjunto de teste motor/hélice deve incluir no mínimo:
-
-- motor/variante;
-- hélice/variante ou descrição estruturada;
-- tensão/células ou tensão medida;
-- condições/observações quando conhecidas;
-- fonte/evidência;
-- amostras ordenadas;
-- status de revisão.
+Um conjunto de teste motor/hélice deve incluir no mínimo motor/variante, hélice/variante, tensão/células, condições, fonte/evidência, amostras e status.
 
 Amostras típicas:
 
@@ -386,59 +395,27 @@ Amostras típicas:
 - tensão medida por ponto deve ser preferida quando disponível;
 - ausência de tensão não autoriza assumir silenciosamente tensão nominal;
 - `KV × V` é apenas referência de RPM ideal sem carga;
-- `pitch × RPM` pode gerar **velocidade teórica de passo**, mas nunca deve ser apresentada como velocidade real/máxima do drone.
+- `pitch × RPM` pode gerar **velocidade teórica de passo**, nunca velocidade real/máxima do drone.
 
-### 12.2 Velocidade teórica de passo
+### 12.2 Interpolação
 
-Quando pitch e RPM existirem:
+Interpolação só pode ocorrer dentro do intervalo coberto pelos dados válidos/aprovados. Para hover, o lookup deve preferir empuxo requerido como variável-alvo.
 
-```text
-pitch_m = pitch_in × 0.0254
-pitch_speed_m_min = pitch_m × RPM
-pitch_speed_km_h = pitch_speed_m_min × 60 / 1000
-```
-
-A UI deve apresentar aviso de que esse valor ignora slip, arrasto, advance ratio e outros efeitos aerodinâmicos.
-
-### 12.3 Interpolação
-
-Interpolação só pode ocorrer dentro do intervalo coberto pelos dados válidos/aprovados, salvo modelo de extrapolação explicitamente documentado. O padrão é **não extrapolar**.
-
-Para hover, o lookup/interpolação deve preferir empuxo requerido como variável-alvo, e não assumir linearidade em throttle.
-
-### 12.4 Gráficos
+### 12.3 Gráficos
 
 Não usar por padrão uma única escala Y para grandezas incompatíveis como corrente, empuxo, RPM e `gf/W`.
 
-Visualizações recomendadas:
+### 12.4 Importação e IA
 
-- empuxo × throttle;
-- corrente/potência × throttle;
-- RPM × throttle;
-- eficiência estática × throttle ou empuxo.
+A seção pode receber dados por entrada manual, CSV/tabela, scraping, PDF/datasheet, imagem técnica e futura digitalização de gráfico revisada.
 
-A tabela permanece representação auditável/acessível dos dados.
-
-### 12.5 Importação e IA
-
-A seção pode receber dados por:
-
-- entrada manual;
-- CSV/tabela;
-- scraping de fabricante;
-- PDF/datasheet;
-- imagem técnica analisada por IA;
-- digitalização de gráfico futura/revisada.
-
-Curvas digitalizadas a partir de imagens devem manter essa proveniência e não recebem automaticamente o mesmo nível de confiança de dados tabulares originais.
-
-### 12.6 Integração com análise
+### 12.5 Integração com análise
 
 Curva válida/aprovada pode alimentar:
 
 ```text
 empuxo requerido por motor
-→ lookup/interpolação dentro da faixa
+→ lookup/interpolação
 → corrente + tensão + potência + RPM
 → TWR / hover / eficiência / autonomia
 ```
@@ -449,36 +426,101 @@ Se o alvo estiver fora da curva, retornar indisponibilidade/warning; não extrap
 
 A recomendação deve seguir `PROPULSION_RECOMMENDATION.md`.
 
-A unidade de recomendação é o conjunto:
+A unidade de recomendação é:
 
 ```text
 motor + hélice + bateria/tensão (+ ESC quando necessário)
 ```
 
-Para cada candidato o sistema deve:
-
-1. criar uma variante virtual sem modificar o projeto do usuário;
-2. recalcular massa seca/decolagem incluindo as próprias peças candidatas;
-3. recalcular empuxo requerido por motor;
-4. verificar frame/hélice, tensão, corrente, ESC/bateria e demais hard constraints;
-5. localizar o ponto de operação em curva aprovada ou Physics Engine quando válido;
-6. calcular consumo, eficiência, TWR e autonomia disponíveis;
-7. aplicar prioridades do perfil de voo/uso;
-8. gerar ranking explicável.
+Para cada candidato o sistema deve criar variante virtual, recalcular massa, recalcular empuxo requerido, verificar hard constraints, localizar ponto de operação, calcular métricas disponíveis e gerar ranking explicável.
 
 Regras obrigatórias:
 
-- motor de maior empuxo máximo não vence automaticamente;
+- maior empuxo máximo não vence automaticamente;
 - eficiência é avaliada no regime relevante quando houver dados;
-- fase operacional sem dados não é tratada como consumo zero;
+- fase sem dados não vira consumo zero;
 - `danger` não é mascarado por score;
 - `profileScore`, `dataCoverage` e `confidence` são separados;
-- sem dados físicos suficientes, mostrar `dados insuficientes` em vez de inventar números;
-- aplicar um candidato ao projeto exige ação explícita do usuário.
+- sem dados suficientes, mostrar `dados insuficientes`;
+- aplicar candidato exige ação explícita do usuário.
 
-A UI deve permitir abrir `Por que foi recomendado?` e mostrar os principais trade-offs entre candidatos.
+## 14. Alcance FPV / RF Link Budget
 
-## 14. Unidades
+A análise deve seguir `FPV_LINK_BUDGET.md`.
+
+### 14.1 Entrada principal
+
+O operador informa:
+
+```text
+Distância desejada (km)
+Frequência/canal
+Margem desejada
+VTX/potência
+Antena TX
+VRX/óculos + sensibilidade
+Antena(s) RX
+Perdas adicionais opcionais
+```
+
+Componentes podem vir do catálogo ou ser preenchidos manualmente.
+
+### 14.2 Cálculos
+
+O calculation engine deve fornecer:
+
+- mW ↔ dBm;
+- FSPL;
+- potência recebida;
+- margem disponível;
+- headroom após margem desejada;
+- distância teórica máxima em espaço livre;
+- potência teórica mínima de VTX para a distância-alvo;
+- EIRP quando dados forem suficientes;
+- mismatch loss a partir de SWR quando semanticamente aplicável.
+
+### 14.3 Semântica de antena
+
+O sistema deve distinguir:
+
+```text
+directivity
+gain
+realized-gain
+unknown
+```
+
+Não descontar novamente eficiência/mismatch quando já estiverem incluídos no valor de ganho. Se a semântica for desconhecida e existirem perdas separadas, emitir warning em vez de assumir silenciosamente.
+
+### 14.4 VRX/óculos
+
+A sensibilidade deve preservar condição/mode. Não inventar sensibilidade a partir do nome do equipamento.
+
+Para diversity de seleção:
+
+- avaliar branches separadamente;
+- mostrar melhor branch sob as hipóteses;
+- não somar ganhos como array coerente.
+
+### 14.5 Analógico versus digital
+
+O link budget básico pode ser compartilhado, mas a interpretação da sensibilidade/qualidade muda. Em digital, usar sensibilidade correspondente ao modo selecionado. Em analógico, tratar threshold como condição específica, não como fronteira absoluta de qualidade.
+
+### 14.6 Limitações obrigatórias
+
+A UI deve exibir:
+
+- **modelo de espaço livre**;
+- obstáculos/terrain/multipath/interferência não modelados;
+- orientação/polarização podem alterar o resultado;
+- alcance de vídeo não é alcance do rádio-controle;
+- potência teórica necessária não significa autorização regulatória.
+
+### 14.7 Integração com projeto
+
+`targetFpvRangeKm` pode ser persistido como constraint/intenção. VTX e antena do drone entram normalmente no orçamento de massa e energia. VRX/óculos do operador podem permanecer como equipamento de estação e não entram na massa do drone.
+
+## 15. Unidades
 
 Entradas e apresentação podem aceitar:
 
@@ -493,11 +535,15 @@ Entradas e apresentação podem aceitar:
 - RPM;
 - gf/W;
 - km/h apenas com semântica explícita;
-- g/gf e N para empuxo conforme contexto de UI, com representação interna inequívoca.
+- km/m para distância RF;
+- MHz/GHz para frequência, com unidade canônica explícita;
+- mW/W/dBm para potência RF;
+- dB para razões/perdas e dBi para ganho de antena;
+- g/gf e N para empuxo conforme contexto.
 
-O motor utiliza unidades canônicas definidas no domínio.
+O motor utiliza unidades canônicas definidas no domínio. dBm, dB e dBi não são intercambiáveis.
 
-## 15. Estados vazios e incompletos
+## 16. Estados vazios e incompletos
 
 A UI deve diferenciar:
 
@@ -509,11 +555,12 @@ A UI deve diferenciar:
 - `conflito de fontes`;
 - `candidato incompatível`;
 - `ranking com cobertura incompleta`;
+- `link RF com dados insuficientes`;
 - valor zero real.
 
 Nunca representar todos esses estados como `0`.
 
-## 16. Persistência
+## 17. Persistência
 
 PostgreSQL é a fonte principal de dados persistidos do produto.
 
@@ -528,9 +575,9 @@ Requisitos:
 - importação validada antes de persistência autoritativa;
 - recuperação segura após erro de parsing/processamento.
 
-Avaliações temporárias de candidatos podem ser calculadas em memória/cache. Se rankings forem persistidos/exportados, devem guardar versões de perfil/modelo e referências suficientes para reprodução.
+Avaliações temporárias de candidatos/link budget podem ser calculadas em memória/cache. Se persistidas/exportadas, guardar versões, inputs e referências suficientes para reprodução.
 
-## 17. Acessibilidade
+## 18. Acessibilidade
 
 - foco visível;
 - controles rotulados;
@@ -540,13 +587,14 @@ Avaliações temporárias de candidatos podem ser calculadas em memória/cache. 
 - uso por teclado para fluxos principais;
 - conflitos/evidências de import legíveis sem depender apenas de cor;
 - gráficos da Bancada acompanhados de tabela/resumo acessível;
-- ranking e motivos legíveis sem depender apenas de cor/ordem visual.
+- ranking e motivos legíveis sem depender apenas de cor/ordem visual;
+- estado RF `pass/borderline/fail` acompanhado de texto e valores.
 
-## 18. Responsividade
+## 19. Responsividade
 
-Desktop é prioridade do MVP, pois comparação, builder, Bancada, recomendação e revisão de imports exigem densidade de informação. Tablet deve permanecer utilizável. Mobile pode apresentar layout simplificado, mas não é requisito de paridade completa no primeiro ciclo.
+Desktop é prioridade do MVP, pois comparação, Builder, Bancada, recomendação, RF link budget e revisão de imports exigem densidade de informação. Tablet deve permanecer utilizável. Mobile pode apresentar layout simplificado.
 
-## 19. Critérios de aceite gerais
+## 20. Critérios de aceite gerais
 
 Uma funcionalidade só está concluída quando:
 
@@ -558,9 +606,13 @@ Uma funcionalidade só está concluída quando:
 - dados extraídos por IA não pulam staging/revisão;
 - evidência de campos importados é preservada;
 - Bancada não apresenta pitch speed como velocidade real do drone;
-- grandezas de unidades incompatíveis não são visualizadas numa escala única enganosa por padrão;
+- grandezas incompatíveis não são visualizadas numa escala única enganosa por padrão;
 - recomendação recalcula massa por candidato e avalia hard constraints antes do score;
 - score, cobertura e confiança não são misturados;
 - ranking apresenta motivos/trade-offs;
+- link budget não duplica perdas de antena nem inventa sensibilidade;
+- alcance FPV é rotulado como estimativa de espaço livre;
+- vídeo FPV e rádio-controle permanecem separados;
+- status regulatório não é inferido sem módulo/dados específicos;
 - identidade NEXO foi respeitada;
 - documentação foi atualizada se houve mudança de contrato.
