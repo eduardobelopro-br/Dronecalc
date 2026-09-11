@@ -1,8 +1,8 @@
 # Roadmap — DroneCalc
 
-**Versão:** 0.7  
+**Versão:** 0.8  
 **Status:** planejamento técnico revisado  
-**Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, da persistência e da IA; evoluir a propulsão por dados de bancada/modelo físico e usar esses resultados para recomendar conjuntos de propulsão com massa recalculada e critérios orientados ao uso.
+**Estratégia:** construir uma fundação full-stack pequena e auditável, mantendo o motor de cálculo independente da UI, persistência e IA; evoluir propulsão por dados de bancada/modelo físico; recomendar conjuntos com massa recalculada; e adicionar planejamento de enlace FPV por link budget auditável.
 
 ## 1. Princípios de execução
 
@@ -34,6 +34,10 @@
 - score de adequação, cobertura de dados e confiança são dimensões separadas;
 - `gf/W` deve ser tratado como eficiência estática de empuxo, nunca como eficiência percentual;
 - `pitch × RPM` produz apenas velocidade teórica de passo e nunca deve ser apresentado como velocidade real/máxima do drone;
+- alcance FPV por FSPL deve ser apresentado como estimativa de espaço livre, nunca garantia de alcance real;
+- perdas de antena não podem ser aplicadas duas vezes por desconhecer a semântica de `gain/directivity/realized gain`;
+- link de vídeo FPV e link de rádio-controle são análises separadas;
+- potência RF necessária não implica autorização regulatória;
 - gráficos técnicos não devem misturar grandezas de unidades incompatíveis numa única escala Y por padrão;
 - cada etapa atualiza documentação e ADR quando alterar contrato ou arquitetura;
 - manter o projeto executável ao final de cada etapa.
@@ -58,6 +62,7 @@ Entregas:
 - scraping controlado de fabricantes em `docs/MANUFACTURER_SCRAPING.md`;
 - workspace de dados de bancada em `docs/BENCH_DATA_WORKSPACE.md`;
 - recomendação de propulsão orientada ao uso em `docs/PROPULSION_RECOMMENDATION.md`;
+- alcance FPV/link budget em `docs/FPV_LINK_BUDGET.md`;
 - roadmap e prompts de implementação.
 
 Critério: documentos superiores não se contradizem e qualquer IA implementadora consegue identificar a fonte normativa de cada decisão.
@@ -109,6 +114,7 @@ Critério: serviços sobem/reiniciam sem perda indevida de dados e nenhum segred
 - conversões explícitas;
 - validação de unidade;
 - nenhuma aritmética de grandezas incompatíveis;
+- incluir unidades/logaritmos RF necessários posteriormente sem misturar dBm, dB e potência linear;
 - testes de round-trip e limites.
 
 ---
@@ -215,7 +221,11 @@ Critério: serviços sobem/reiniciam sem perda indevida de dados e nenhum segred
 - battery;
 - frame;
 - FC;
-- receiver/VTX;
+- receiver de controle;
+- VTX;
+- VRX/FPV goggles;
+- FPV antenna;
+- RF cable/pigtail opcional;
 - camera/GPS;
 - custom.
 
@@ -243,7 +253,31 @@ Critério: serviços sobem/reiniciam sem perda indevida de dados e nenhum segred
 - resultado;
 - nunca armazenar derivado como se fosse declaração do fabricante.
 
-Critério: cálculos determinísticos possuem IDs/versionamento e testes de limite.
+## Etapa 4E — Campos RF básicos
+
+### VTX
+- frequência/canais;
+- potência configurável mW/dBm;
+- massa e consumo;
+- conectores;
+- limites declarados.
+
+### VRX/óculos
+- frequência;
+- sensibilidade + condição/modo;
+- branches/diversity;
+- conectores.
+
+### Antenas
+- frequência/faixa;
+- ganho dBi;
+- `gainKind`: directivity/gain/realized-gain/unknown;
+- polarização;
+- SWR quando conhecido;
+- eficiência quando realmente fornecida;
+- conectores/massa.
+
+Critério: cálculos determinísticos possuem IDs/versionamento e dados RF não perdem a semântica necessária para evitar dupla contagem de perdas.
 
 ---
 
@@ -337,16 +371,6 @@ Critério: um cadastro pode ser iniciado a partir de uma página oficial de fabr
 
 Contrato deve suportar saída estruturada e evoluir para multimodal sem acoplar o domínio ao Ollama. O provider não controla scraping, destinos de rede nem persistência autoritativa.
 
-Contrato conceitual inicial:
-
-```ts
-interface AiProvider {
-  extractStructured<T>(request: StructuredExtractionRequest<T>): Promise<AiExtractionResult<T>>
-}
-```
-
-A IA implementadora pode adotar contrato multimodal unificado se for mais simples/robusto, desde que preserve substituibilidade, validação de schema e testabilidade.
-
 ## Etapa 6B — Ollama local
 
 - adapter HTTP;
@@ -365,7 +389,7 @@ A IA implementadora pode adotar contrato multimodal unificado se for mais simple
 - extrair somente campos previstos no schema da categoria;
 - preservar asset/evidência e valor bruto;
 - normalização de unidade fora do modelo quando determinística;
-- condições fazem parte do dado, por exemplo `35 A @ 5S`;
+- condições fazem parte do dado;
 - confidence da IA não equivale a aprovação;
 - prompt injection em texto/imagem/documento não altera permissões ou workflow.
 
@@ -376,12 +400,9 @@ A IA implementadora pode adotar contrato multimodal unificado se for mais simple
 - considerar variante/revisão/condição;
 - valores divergentes geram conflito `needs_review`;
 - não escolher silenciosamente o maior confidence;
-- checks determinísticos podem apontar inconsistência (`P = V × I` etc.), mas não corrigem a fonte automaticamente;
-- prioridade da fonte ajuda revisão, mas não substitui consistência física/contextual.
+- checks determinísticos podem apontar inconsistência, mas não corrigem a fonte automaticamente.
 
 ## Etapa 6E — Review workflow
-
-Estados sugeridos:
 
 ```text
 extracted
@@ -393,22 +414,15 @@ extracted
 
 Cada campo extraído deve poder guardar evidência e confiança.
 
-Valor extraído e valor derivado são distintos. Exemplo: `KV` lido da ficha permanece dado de fonte; `Kt` calculado pertence ao Physics Engine com `formulaId`.
-
 ## Etapa 6F — Gráficos/curvas em imagem (incremental)
 
-Pode ser adiada sem bloquear o cadastro multimodal básico.
-
-Quando implementada:
-
 - identificar eixos, unidades, escala e legenda;
-- marcar pontos como `digitized-from-image` ou equivalente;
+- marcar pontos como `digitized-from-image`;
 - guardar asset/região/método;
-- não promover automaticamente para medição de alta confiança;
 - preferir CSV/tabela original quando existir;
 - exigir revisão humana antes de alimentar cálculos de alta confiança.
 
-Critério da fase: IA sugere dados textuais/visuais estruturados com evidência; schema, reconciliação e revisão decidem o que é publicado.
+Critério da fase: IA sugere dados estruturados com evidência; schema, reconciliação e revisão decidem o que é publicado.
 
 ---
 
@@ -416,13 +430,11 @@ Critério da fase: IA sugere dados textuais/visuais estruturados com evidência;
 
 **Especificações obrigatórias:** `docs/BENCH_DATA_WORKSPACE.md` e `docs/PHYSICS_ENGINE.md`.
 
-Esta fase possui duas rotas complementares. A rota empírica baseada em bancada é preferida quando existe ensaio aplicável. A rota teórica só é usada quando há parâmetros suficientes e nunca deve fabricar coeficientes ou precisão.
-
 ## Etapa 7A — Contratos e curvas de bancada
 
 - motor + variante;
-- hélice + variante ou descrição estruturada;
-- diâmetro/pitch/número de pás quando conhecidos;
+- hélice + variante;
+- diâmetro/pitch/número de pás;
 - tensão/células/condições;
 - ESC quando conhecido;
 - throttle;
@@ -431,183 +443,95 @@ Esta fase possui duas rotas complementares. A rota empírica baseada em bancada 
 - tensão por amostra preferencialmente medida;
 - potência medida ou derivável;
 - RPM;
-- eficiência estática `gf/W` medida ou derivável;
-- proveniência e status de revisão.
-
-Regras:
-
-- `throttle %` não é aceleração física;
-- empuxo/unidade ambígua exige revisão;
-- tensão ausente não vira tensão nominal silenciosamente;
-- valores derivados não substituem a fonte original.
+- eficiência estática `gf/W`;
+- proveniência/status.
 
 ## Etapa 7B — Workspace Bancada UI
 
-Criar a seção principal **Bancada** da aplicação.
-
-Entregas:
-
 - listagem/busca de ensaios;
-- detalhe do ensaio motor+hélíce+condições;
+- detalhe motor+hélíce+condições;
 - criação/edição de amostras;
 - tabela com unidades explícitas;
-- proveniência/status por dado;
-- acesso pelo Catálogo e pela Análise;
-- `Como foi calculado?` para valores derivados;
-- layout NEXO e acessibilidade;
-- gráficos técnicos separados por unidade/grandeza.
-
-Gráficos padrão:
-
-```text
-Empuxo × throttle
-Corrente/Potência × throttle
-RPM × throttle
-Eficiência estática (gf/W) × throttle ou empuxo
-```
-
-Não usar uma única escala Y para A, gf, RPM e `gf/W` como se fossem grandezas comparáveis.
+- proveniência/status;
+- `Como foi calculado?`;
+- gráficos separados por grandeza.
 
 ## Etapa 7C — Importação de bench data
 
 - CSV/tabela;
-- preview antes de persistir;
+- preview;
 - mapeamento de cabeçalhos;
 - schema estrito;
-- unidade obrigatória/confirmada quando ambígua;
-- suporte a vírgula/ponto decimal conforme contratos do projeto;
-- preservação do valor bruto;
+- unidades explícitas;
+- raw values;
 - duplicatas/conflitos;
-- rollback/atomicidade quando persistência final falhar;
-- nenhuma extrapolação silenciosa.
+- rollback/atomicidade;
+- sem extrapolação silenciosa.
 
-Dados vindos de scraping, PDF ou imagem seguem staging/revisão das Fases 5 e 6.
-
-## Etapa 7D — Métricas derivadas e validação de consistência
-
-Implementar no calculation engine, não na UI:
-
-### Potência elétrica
+## Etapa 7D — Métricas derivadas
 
 ```text
 P = V × I
-```
-
-### Eficiência estática de empuxo
-
-```text
 static_thrust_efficiency_gf_per_W = thrust_gf / power_W
-```
-
-Não interpretar como eficiência percentual.
-
-### Velocidade teórica de passo
-
-```text
-pitch_m = pitch_in × 0.0254
 pitch_speed_km_h = pitch_m × RPM × 60 / 1000
 ```
 
-Nome obrigatório: **Velocidade teórica de passo**.
-
-Deve carregar aviso de que não representa velocidade real/máxima da aeronave e ignora slip, arrasto, advance ratio e outros efeitos aerodinâmicos.
-
-### Checks
-
-Incluir warnings equivalentes a:
-
-```text
-BENCH_VOLTAGE_MISSING
-BENCH_POWER_INCONSISTENT
-BENCH_EFFICIENCY_UNIT_AMBIGUOUS
-BENCH_THRUST_UNIT_AMBIGUOUS
-BENCH_RPM_EXCEEDS_NO_LOAD_REFERENCE
-BENCH_SAMPLE_DUPLICATE
-BENCH_SAMPLE_INVALID
-PITCH_SPEED_NOT_AIRCRAFT_SPEED
-```
+Pitch speed deve ser rotulada como teórica, nunca velocidade real.
 
 ## Etapa 7E — Interpolação e propulsão medida
 
-- interpolação apenas dentro da faixa medida/aprovada;
-- fora da faixa → unavailable/warning;
-- método/versionamento;
-- testes de fronteira;
-- thrust/current/power/RPM no ponto solicitado quando disponíveis;
-- hover current por motor;
-- eficiência `gf/W`;
-- total do sistema;
-- lookup preferencial por empuxo requerido para hover, não linearidade presumida de throttle.
+- interpolação apenas dentro da faixa aprovada;
+- lookup preferencial por empuxo requerido;
+- hover current;
+- eficiência;
+- total do sistema.
 
 ## Etapa 7F — Contratos do Physics Engine
 
-- parâmetros de bateria;
-- parâmetros de ESC/drive;
-- parâmetros eletromecânicos do motor;
-- parâmetros aerodinâmicos da hélice;
+- bateria;
+- ESC/drive;
+- motor eletromecânico;
+- hélice;
 - atmosfera;
-- operating point/result/provenance.
+- operating point/proveniência.
 
 ## Etapa 7G — Bateria sob carga
 
 - OCV/SOC quando houver modelo;
 - resistência interna;
-- sag `V_load ≈ V_oc - I × R_internal` como modelo inicial explícito;
-- limites por química;
-- temperatura apenas quando houver modelo/dados suficientes.
+- sag;
+- limites por química.
 
 ## Etapa 7H — Motor eletromecânico e torque
 
-- KV;
-- conversão cuidadosa para Ke/Kt em SI;
+- KV/Ke/Kt;
 - resistência do enrolamento;
 - corrente sem carga/perdas;
 - back-EMF;
 - torque;
 - potência mecânica;
-- eficiência;
-- limites e hipóteses.
+- eficiência.
 
 ## Etapa 7I — Hélice aerodinâmica
 
-Quando houver coeficientes/dados suficientes:
-
-- diâmetro;
-- pitch/geometria identificável;
+- diâmetro/pitch/geometria;
 - número de pás;
-- Ct/Cq/Cp;
+- Ct/Cq/Cp quando disponíveis;
 - densidade do ar;
 - thrust/torque/power por RPM.
 
-Sem coeficientes ou curva aplicável, não fabricar resultado de alta confiança.
-
 ## Etapa 7J — Solver do ponto de operação
 
-Resolver numericamente o equilíbrio aproximado:
-
-```text
-torque disponível do motor(RPM, I, V)
-=
-torque requerido pela hélice(RPM, rho, geometry)
-```
-
-Entregas:
-
-- convergência controlada;
-- limites físicos;
-- erro explícito quando não convergir;
-- sem solução silenciosamente fora do envelope;
-- resultado com RPM, corrente, torque, thrust, potência e eficiência quando calculáveis.
+Resolver equilíbrio motor × hélice com convergência controlada e limites físicos.
 
 ## Etapa 7K — Validação contra bancada
 
-- comparar modelo teórico com ensaios reais;
 - erro absoluto/relativo;
-- tolerâncias documentadas;
-- calibrar/limitar confiança;
-- modelo que diverge além do gate não pode ser apresentado como alta confiança.
+- tolerâncias;
+- calibração de confiança;
+- modelo divergente não recebe alta confiança.
 
-Critério de saída da Fase 7: o usuário consegue cadastrar/importar/revisar uma curva na seção Bancada, visualizar grandezas corretamente, usar dados aprovados para análise sem extrapolação silenciosa e comparar o modelo físico contra bancada real quando implementado.
+Critério: dados medidos e modelo físico podem sustentar análises defensáveis de propulsão.
 
 ---
 
@@ -615,15 +539,12 @@ Critério de saída da Fase 7: o usuário consegue cadastrar/importar/revisar um
 
 **Especificação obrigatória:** `docs/PROPULSION_RECOMMENDATION.md`.
 
-A recomendação básica de propulsão é parte do fluxo principal do produto. Não deve esperar a otimização global da Fase 12.
-
 ## Etapa 8A — Knowledge/heuristic model
 
 - heurísticas versionadas;
 - source/evidence;
 - confidence;
-- condições;
-- nenhuma heurística vira regra rígida automaticamente.
+- condições.
 
 ## Etapa 8B — Flight profiles
 
@@ -633,8 +554,7 @@ A recomendação básica de propulsão é parte do fluxo principal do produto. N
 - Long Range;
 - Mini Long Range;
 - Cinewhoop;
-- prioridades/targets configuráveis;
-- pesos/versionamento separados de constantes físicas.
+- prioridades/targets configuráveis.
 
 ## Etapa 8C — Sub-250 e experiência
 
@@ -643,91 +563,200 @@ A recomendação básica de propulsão é parte do fluxo principal do produto. N
 
 ## Etapa 8D — Candidate Generator
 
-Gerar conjuntos plausíveis, não apenas motores isolados:
-
 ```text
 heurísticas/catálogo
-→ motor + hélice + bateria/tensão (+ ESC quando necessário)
+→ motor + hélice + bateria/tensão (+ ESC)
 → candidatos
 ```
 
-O gerador reduz o espaço de busca; não aprova fisicamente um candidato.
-
 ## Etapa 8E — Perfil operacional orientado ao uso
 
-- representar pesos relativos de hover/cruzeiro/subida/agressivo/reserva quando aplicável;
-- normalizar e versionar pesos;
-- não confundir perfil operacional com planejamento de rota/missão autônoma;
-- fase sem modelo/dado não entra como consumo zero;
-- cruzeiro só recebe consumo quando houver dado/modelo defensável.
+- pesos relativos de hover/cruzeiro/subida/agressivo/reserva;
+- normalização/versionamento;
+- fase sem dado não vira zero.
 
-## Etapa 8F — Avaliação de candidato com recálculo de massa
-
-Para cada candidato:
+## Etapa 8F — Avaliação com recálculo de massa
 
 ```text
-variante virtual do projeto
-→ recalcular massa total
-→ empuxo requerido por motor
+variante virtual
+→ massa total
+→ empuxo requerido
 → TWR/reserva
 → compatibilidade
 → bancada/Physics Engine
-→ corrente/potência/eficiência/autonomia disponíveis
+→ corrente/potência/eficiência/autonomia
+```
+
+## Etapa 8G — Ranking multiobjetivo explicável
+
+- métricas normalizadas;
+- pesos do perfil;
+- `profileScore`, `dataCoverage` e `confidence` separados;
+- motivos positivos/negativos;
+- determinismo.
+
+## Etapa 8H — Testes do recomendador
+
+- massa por candidato;
+- eficiência versus empuxo máximo;
+- `danger` dominante;
+- cobertura/confiança;
+- explicabilidade.
+
+Critério: recomendar conjuntos de propulsão de forma explicável conforme uso.
+
+---
+
+# FASE 9 — Alcance FPV / RF Link Budget
+
+**Especificação obrigatória:** `docs/FPV_LINK_BUDGET.md`.
+
+Esta fase dimensiona o **link de vídeo FPV**. Não representa nem substitui o link de rádio-controle.
+
+## Etapa 9A — Contratos RF e conversões
+
+Implementar no calculation engine:
+
+```text
+mW ↔ dBm
+dB/dBi sem mistura com potência linear
+antenna gain semantics
+SWR → mismatch loss
 ```
 
 Requisitos:
 
-- massa dos próprios motores/hélices/bateria candidatos entra no cálculo;
-- troca de bateria recalcula simultaneamente massa, tensão, corrente e autonomia;
-- massa ausente não vira zero;
-- `danger` invalida/identifica candidato incompatível antes do score;
-- curva de bancada aplicável tem prioridade sobre modelo teórico;
-- sem dados suficientes → estado explícito.
+- `directivity`, `gain`, `realized-gain`, `unknown` explicitamente distintos;
+- evitar dupla contagem de eficiência/mismatch;
+- validação numérica de distância, frequência, potência, SWR e eficiência;
+- formulaIds versionados.
 
-## Etapa 8G — Ranking multiobjetivo explicável
-
-- normalizar métricas antes de combinar grandezas distintas;
-- aplicar pesos do perfil de voo/uso;
-- eficiência deve ser avaliada no regime relevante, não apenas no máximo empuxo;
-- conjunto de maior empuxo não vence automaticamente;
-- `profileScore`, `dataCoverage` e `confidence` são exibidos separadamente;
-- registrar motivos positivos/negativos do ranking;
-- ranking determinístico para mesmas entradas e versões.
-
-Exemplo de saída:
+Testes de referência:
 
 ```text
-Motor X + Hélice A + 4S
-Massa final
-Hover/corrente
-TWR
-Eficiência
-Autonomia quando disponível
-Adequação ao perfil
-Cobertura dos dados
-Confiança
-Por que foi recomendado?
+100 mW = 20 dBm
+200 mW ≈ 23.0103 dBm
+SWR 1.0 = 0 dB
+SWR 1.5 ≈ 0.177 dB
 ```
 
-## Etapa 8H — Testes do recomendador
+## Etapa 9B — FSPL e link budget direto
 
-Fixtures devem demonstrar:
+Implementar:
 
-- motor mais pesado aumenta massa e hover requerido;
-- Mini Long Range pode preferir menor TWR quando eficiência/autonomia são superiores e o mínimo continua atendido;
-- Racing pode priorizar maior reserva/TWR;
-- `danger` nunca é mascarado;
-- fase operacional sem dados não é zero;
-- ranking não favorece silenciosamente candidato com dados fracos;
-- resultados e explicações são reproduzíveis.
+```text
+FSPL_dB = 32.44 + 20log10(d_km) + 20log10(f_MHz)
+Pr = Pt + Gt + Gr - losses - FSPL
+availableMargin = Pr - sensitivity
+headroom = availableMargin - desiredMargin
+```
 
-Critério de saída da Fase 8: dado um projeto com massa/componentes e candidatos tecnicamente analisáveis, o DroneCalc consegue recomendar conjuntos de propulsão de forma explicável, recalculando a massa de cada variante e respeitando o perfil de uso.
+Saída:
+
+- FSPL;
+- potência recebida estimada;
+- sensibilidade usada + condição;
+- margem disponível;
+- margem desejada;
+- headroom;
+- `pass/borderline/fail/insufficient-data`.
+
+Resultado é de espaço livre e deve carregar warning explícito.
+
+## Etapa 9C — Solver inverso por distância-alvo
+
+O operador informa `targetDistanceKm`.
+
+Calcular:
+
+- potência teórica mínima de VTX para fechar o link com margem desejada;
+- distância teórica máxima em espaço livre para a configuração existente;
+- potência necessária em dBm e mW;
+- EIRP calculada quando inputs forem suficientes.
+
+Não associar automaticamente potência necessária a legalidade/regulamentação.
+
+## Etapa 9D — VRX/óculos e antenas do catálogo
+
+- selecionar VRX/óculos cadastrado ou entrada manual;
+- selecionar uma ou mais antenas de recepção;
+- preservar sensibilidade condicionada por modo/sistema;
+- suportar polarização;
+- suportar perdas de cabo/conector;
+- diversity do tipo seleção avalia branches separadamente;
+- não somar ganhos de antennas diversity como array coerente.
+
+## Etapa 9E — UI `Alcance FPV`
+
+Entradas mínimas:
+
+```text
+Distância desejada (km)
+Frequência/canal
+Margem desejada
+VTX/potência
+Antena TX
+VRX/óculos
+Antena(s) RX
+Perdas adicionais opcionais
+```
+
+Saídas:
+
+```text
+FSPL
+Potência recebida
+Sensibilidade
+Margem disponível
+Headroom
+Potência VTX mínima teórica
+EIRP
+Distância teórica máxima em espaço livre
+Warnings/hipóteses
+```
+
+A UI deve explicar `Como foi calculado?` e diferenciar campos medidos, fabricante, user-provided e calculados.
+
+## Etapa 9F — Recomendação RF orientada à distância
+
+Quando o catálogo permitir:
+
+```text
+frequência compatível
+→ conectores/polarização
+→ sensibilidade
+→ ganho/perdas
+→ link budget na distância-alvo
+→ margem desejada
+→ massa/consumo do VTX
+→ ranking explicável
+```
+
+A recomendação de VTX/antena deve considerar impacto de massa e consumo no projeto quando disponível.
+
+## Etapa 9G — Testes e limitações
+
+Cobrir:
+
+- mW/dBm;
+- FSPL/inversão;
+- solver de potência;
+- SWR;
+- realized gain sem dupla perda;
+- sensibilidade ausente;
+- diversity simplificado;
+- analógico/digital com condição de sensibilidade;
+- distância/frequência inválidas;
+- warning `RF_FREE_SPACE_ONLY_MODEL`;
+- warning de status regulatório não verificado.
+
+Critério de saída da Fase 9: o operador informa a distância desejada e dados/peças do sistema FPV, e o DroneCalc calcula um link budget auditável, margem e potência teórica necessária sem apresentar o resultado como alcance garantido.
 
 ---
 
-# FASE 9 — Builder e análise de projeto
+# FASE 10 — Builder e análise de projeto
 
-## Etapa 9A — Primeiro Builder UI
+## Etapa 10A — Primeiro Builder UI
 
 - criar/abrir projeto;
 - adicionar componentes;
@@ -736,67 +765,77 @@ Critério de saída da Fase 8: dado um projeto com massa/componentes e candidato
 - resumo de massa/energia/TWR;
 - warnings.
 
-## Etapa 9B — Perfil por estilo de voo
+## Etapa 10B — Perfil por estilo de voo
 
 - escolha de perfil;
 - sliders/traits secundários;
 - perfil operacional quando suportado;
-- recomendações explicáveis.
+- recomendações explicáveis;
+- `targetFpvRangeKm` opcional como constraint/intenção separada.
 
-## Etapa 9C — Recomendação de conjunto de propulsão na UI
+## Etapa 10C — Recomendação de conjunto de propulsão na UI
 
-- ação `Recomendar propulsão`/equivalente;
-- mostrar candidatos motor + hélice + bateria/tensão;
-- massa final específica de cada candidato;
-- hover, TWR, consumo, eficiência e autonomia quando disponíveis;
+- ação `Recomendar propulsão`;
+- candidatos motor + hélice + bateria/tensão;
+- massa final;
+- hover/TWR/consumo/eficiência/autonomia;
 - compatibilidade;
-- score, cobertura e confiança separados;
-- `Por que foi recomendado?`;
-- aplicar candidato somente após ação explícita do usuário.
+- score/cobertura/confiança;
+- motivos.
 
-## Etapa 9D — Mini Long Range
+## Etapa 10D — Integração Alcance FPV no projeto
+
+- acesso à calculadora RF pelo projeto ativo;
+- reaproveitar VTX/antenas selecionados no Builder;
+- distância-alvo persistida no projeto quando o usuário escolher;
+- warnings RF aparecem na Análise sem substituir warnings de controle RC;
+- consumo/massa do VTX entram normalmente no orçamento elétrico/massa.
+
+## Etapa 10E — Mini Long Range
 
 - eficiência/endurance/baixo peso/estabilidade;
-- 3.5–5\" como orientação flexível, não regra rígida;
+- 3.5–5\" como orientação flexível;
 - LiPo/Li-Ion conforme objetivo;
-- ranking pode preferir menor TWR quando endurance/eficiência forem superiores e segurança continuar válida.
+- alcance FPV desejado pode ser constraint adicional, sem garantir alcance real;
+- ranking de propulsão continua independente do link budget RF, embora ambos usem o mesmo projeto.
 
 ---
 
-# FASE 10 — Comparação e centro de gravidade
+# FASE 11 — Comparação e centro de gravidade
 
-## Etapa 10A — Duplicação/variantes
+## Etapa 11A — Duplicação/variantes
 
 - copiar projeto;
-- alterar motor/bateria/hélice;
+- alterar motor/bateria/hélice/VTX/antena;
 - comparação lado a lado.
 
-## Etapa 10B — Centro de gravidade
+## Etapa 11B — Centro de gravidade
 
 - posições x/y/z;
 - CG ponderado por massa;
 - visualização 2D inicialmente;
-- 3D futuro se justificar complexidade.
+- 3D futuro.
 
 ---
 
-# FASE 11 — Relatórios e exportação
+# FASE 12 — Relatórios e exportação
 
 - export/import versionado;
 - relatório técnico;
 - provenance/confidence;
 - warnings;
 - configuração usada;
-- recomendação/ranking com perfil e versão quando incluído;
-- sem afirmar certificação/garantia de voo.
+- recomendação/ranking com perfil e versão;
+- link budget FPV com premissas, distância-alvo e aviso de espaço livre;
+- sem afirmar certificação/garantia de voo ou alcance RF.
 
 ---
 
-# FASE 12 — Otimizador global/avançado
+# FASE 13 — Otimizador global/avançado
 
 Somente após catálogo, dados, recomendador básico e cálculo estarem maduros.
 
-A Fase 8 já entrega recomendação explicável sobre candidatos do catálogo. Esta fase amplia o problema para busca/otimização em escala.
+A Fase 8 entrega recomendação de propulsão; a Fase 9 entrega planejamento FPV. Esta fase amplia busca/otimização em escala.
 
 Inputs possíveis:
 
@@ -806,24 +845,32 @@ Inputs possíveis:
 - células/química;
 - perfil de voo;
 - limites de frame/hélice;
+- target FPV range;
 - disponibilidade de dados confiáveis;
 - custo/disponibilidade futuros.
 
 Evoluções possíveis:
 
-- dimensionamento iterativo de bateria por meta;
-- exploração de grande número de combinações;
+- dimensionamento iterativo de bateria;
+- exploração de muitas combinações;
 - Pareto front;
 - otimização multiobjetivo;
+- recomendação conjunta de propulsão + RF sem fundir suas físicas;
 - poda/estratégias de busca eficientes.
 
-Ranking multiobjetivo deve ser explicável e nunca sobrepor incompatibilidade crítica.
+Hard constraints continuam dominantes.
 
 ---
 
-# FASE 13 — Evoluções opcionais
+# FASE 14 — Evoluções opcionais
 
-- pgvector/RAG quando houver necessidade comprovada;
+- zona de Fresnel e clearance;
+- radio horizon/alturas;
+- terreno/LOS com mapa/DEM;
+- noise floor/interferência medida;
+- link RC/ExpressLRS/Crossfire separado;
+- verificação regulatória por região;
+- pgvector/RAG quando necessário;
 - catálogo colaborativo;
 - sincronização multi-dispositivo;
 - API pública/privada;
@@ -848,7 +895,7 @@ Toda etapa deve passar por:
 7. documentação atualizada;
 8. nenhum segredo no repositório.
 
-Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/tamanho/prompt injection conforme a etapa. Para dados de bancada, adicionar testes de unidade, potência, `gf/W`, pitch speed, importação e ausência de extrapolação. Para Physics Engine, adicionar fixtures e comparação com dados reais quando disponíveis. Para recomendação de propulsão, testar recálculo de massa por candidato, hard constraints antes do score, uso do perfil, cobertura/confiança separadas e explicabilidade do ranking.
+Para ingestão remota, testar SSRF/redirect/MIME/tamanho/prompt injection. Para bancada, testar unidade, potência, `gf/W`, pitch speed e ausência de extrapolação. Para Physics Engine, comparar com dados reais. Para recomendação de propulsão, testar massa por candidato, hard constraints e explicabilidade. Para RF, testar dBm/mW, FSPL, solver inverso, SWR, semântica de ganho, sensibilidade condicionada e avisos de espaço livre/regulamentação.
 
 ---
 
@@ -864,24 +911,22 @@ Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/t
        ↓
 3 Basic Calculation Engine
        ↓
-4 Catalog
- ├──────────────┐
- ↓              ↓
-5 URL/Scraping  7A Bench contracts
- ↓              ↓
-6 Ollama        7B–7E Bancada/Measured Propulsion
- └───────┐      │
-         └──────┤
-                ↓
-          7F–7K Physics Engine
-                ↓
-8 Profiles/Heuristics/Propulsion Recommendation
-                ↓
-9 Builder/Analysis/Recommendation UI
-                ↓
-10–11 Comparison/Reports
-                ↓
-12 Advanced Global Optimizer
+4 Catalog + RF schemas
+ ├───────────────┬─────────────────┐
+ ↓               ↓                 ↓
+5 URL/Scraping   7 Bench/Physics   9A–9D RF Core
+ ↓               ↓                 │
+6 Ollama         8 Propulsion Rec  │
+ └──────┐        │                 │
+        └────────┴────────┬────────┘
+                         ↓
+                  9E–9G FPV UI/Tests
+                         ↓
+                 10 Builder/Analysis
+                         ↓
+             11–12 Compare/Reports
+                         ↓
+                13 Global Optimizer
 ```
 
 ---
@@ -890,18 +935,13 @@ Para ingestão remota, adicionar obrigatoriamente testes de SSRF/redirect/MIME/t
 
 **Etapa 1A — Bootstrap full-stack e workspace.**
 
-Não antecipar PostgreSQL, MinIO, Ollama, scraping, Workspace Bancada, Physics Engine ou recomendador de propulsão para essa etapa. O objetivo é criar a fundação que permitirá implementar esses subsistemas sem acoplamento prematuro.
+Não antecipar PostgreSQL, MinIO, Ollama, scraping, Workspace Bancada, Physics Engine, recomendador ou RF Link Budget para essa etapa.
 
-A orientação executável está em:
+Prompts disponíveis:
 
-`docs/prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`
+- `docs/prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`;
+- `docs/prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md`;
+- `docs/prompts/ETAPA_8_PROPULSION_RECOMMENDATION.md`;
+- `docs/prompts/ETAPA_9_FPV_LINK_BUDGET.md`.
 
-A implementação futura da seção Bancada deve seguir:
-
-`docs/prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md`
-
-A implementação futura da recomendação de propulsão deve seguir:
-
-`docs/prompts/ETAPA_8_PROPULSION_RECOMMENDATION.md`
-
-A IA implementadora pode propor estrutura alternativa mais eficaz/eficiente desde que preserve os requisitos, justifique trade-offs, implemente testes e atualize a documentação quando necessário.
+A IA implementadora pode propor estrutura alternativa mais eficaz/eficiente desde que preserve requisitos, justifique trade-offs, implemente testes e atualize documentação quando necessário.
