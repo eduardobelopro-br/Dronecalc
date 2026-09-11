@@ -1,27 +1,29 @@
 # Estratégia de Testes — DroneCalc
 
-**Versão:** 0.3
+**Versão:** 0.4
 
 ## 1. Objetivo
 
-O DroneCalc produz resultados técnicos; portanto testes numéricos, testes da Bancada e testes de integridade da ingestão são parte do produto, não apenas da implementação.
+O DroneCalc produz resultados técnicos; portanto testes numéricos, testes da Bancada, do recomendador, do link budget RF e da integridade da ingestão são parte do produto, não apenas da implementação.
 
 Prioridade:
 
 1. motor de cálculo;
 2. validação de dados e unidades;
 3. dados/curvas de bancada;
-4. ingestão/staging/proveniência;
-5. migrações/persistência;
-6. integração entre análise e projeto;
-7. UI e acessibilidade;
-8. regressão visual crítica.
+4. RF link budget;
+5. recomendação/scoring;
+6. ingestão/staging/proveniência;
+7. migrações/persistência;
+8. integração entre análise e projeto;
+9. UI e acessibilidade;
+10. regressão visual crítica.
 
 ## 2. Pirâmide de testes
 
 ### Unitários — maioria
 
-- conversões;
+- conversões físicas;
 - fórmulas;
 - potência `V × I`;
 - eficiência estática `gf/W`;
@@ -29,6 +31,12 @@ Prioridade:
 - interpolação;
 - compatibilidade;
 - scoring;
+- mW ↔ dBm;
+- FSPL;
+- SWR → mismatch loss;
+- link budget direto;
+- solver inverso de distância/potência;
+- semântica de antenna gain;
 - normalização;
 - validators;
 - parsers/extractors determinísticos;
@@ -41,6 +49,9 @@ Prioridade:
 - catálogo → resolução de componente;
 - bench test aprovado → lookup/interpolação → análise;
 - import CSV de bancada → preview → validação → persistência;
+- VTX + antena TX + VRX/óculos + antena RX → link budget;
+- projeto com `targetFpvRangeKm` → análise RF;
+- recommendation candidate → massa/physics/profile → ranking;
 - import JSON/CSV → domínio;
 - URL/import job → staging;
 - asset → object storage + metadados;
@@ -53,6 +64,7 @@ Prioridade:
 - criação de projeto;
 - adicionar/substituir componente;
 - seção Bancada: tabela, edição/importação, warnings, proveniência e gráficos;
+- alcance FPV: distância, equipamentos, resultado, warnings e “Como foi calculado?”;
 - cadastro assistido e revisão de campos extraídos;
 - exibir conflitos/evidências;
 - exibir dados ausentes;
@@ -86,9 +98,11 @@ expect(actual).toBeCloseTo(expected, precision)
 
 A tolerância deve refletir a fórmula, não mascarar erros.
 
+Para cálculos logarítmicos RF, documentar tolerância em dB e evitar converter repetidamente linear↔log com arredondamento precoce.
+
 ## 5. Separar cálculo de apresentação
 
-Testes do motor usam valores não arredondados. Arredondamento para `21,4 min` é testado na camada de formatting/UI.
+Testes do motor usam valores não arredondados. Arredondamento de UI é testado na camada de formatting.
 
 Nunca arredondar cedo dentro do cálculo intermediário sem necessidade física/documentada.
 
@@ -113,7 +127,7 @@ Nunca arredondar cedo dentro do cálculo intermediário sem necessidade física/
 - química com valores por célula diferentes;
 - capacidade inválida.
 
-### Potência
+### Potência elétrica
 
 - V × A;
 - entradas medidas;
@@ -137,7 +151,7 @@ Nunca arredondar cedo dentro do cálculo intermediário sem necessidade física/
 - pitch zero/inválido conforme contrato;
 - RPM negativo inválido;
 - resultado sempre identificado como **Velocidade teórica de passo**;
-- teste de UI impede rótulo `Velocidade máxima`/`Velocidade do drone` para essa fórmula;
+- teste de UI impede rótulo `Velocidade máxima`/`Velocidade do drone`;
 - aviso `PITCH_SPEED_NOT_AIRCRAFT_SPEED` ou equivalente permanece visível/contextual.
 
 ### Bancada — RPM sem carga
@@ -192,6 +206,93 @@ Nunca arredondar cedo dentro do cálculo intermediário sem necessidade física/
 - 3 eixos;
 - posição ausente.
 
+### RF — potência linear/log
+
+Obrigatórios:
+
+```text
+1 mW = 0 dBm
+10 mW = 10 dBm
+100 mW = 20 dBm
+200 mW ≈ 23.0103 dBm
+1000 mW = 30 dBm
+```
+
+Cobrir:
+
+- mW → dBm;
+- dBm → mW;
+- round-trip dentro de tolerância;
+- potência `<= 0 mW` inválida;
+- valores extremos não produzem `NaN`/infinito silencioso.
+
+### RF — FSPL
+
+Usar fixtures documentadas e testar invariantes:
+
+- distância/frequência positivas;
+- dobrar distância mantendo frequência aumenta FSPL em aproximadamente `6.0206 dB`;
+- dobrar frequência mantendo distância aumenta FSPL em aproximadamente `6.0206 dB`;
+- forma `km/MHz` é equivalente à forma SI dentro da tolerância;
+- solver inverso recupera a distância original.
+
+### RF — link budget
+
+Cobrir:
+
+- soma/subtração correta de `Pt + Gt + Gr - losses - FSPL`;
+- sensibilidade negativa em dBm tratada corretamente;
+- `availableMargin = Pr - sensitivity`;
+- `headroom = availableMargin - desiredMargin`;
+- `pass/borderline/fail` nos limites exatos;
+- sensibilidade ausente → `insufficient-data`;
+- margem desejada ausente segue política explícita e nunca default oculto no engine.
+
+### RF — solver de potência
+
+- potência calculada fecha exatamente o link na distância/margem alvo dentro da tolerância;
+- conversão final para mW;
+- resultado não recebe automaticamente status legal/regulatório;
+- potência exigida acima do VTX selecionado gera warning.
+
+### RF — SWR/mismatch
+
+Fixtures obrigatórias:
+
+```text
+SWR 1.0 → 0 dB
+SWR 1.5 → ~0.1773 dB
+```
+
+Cobrir:
+
+- SWR `< 1` inválido;
+- SWR muito alto permanece numericamente estável;
+- mismatch só é aplicado quando semanticamente permitido.
+
+### RF — semântica de ganho
+
+- `directivity` pode receber eficiência/mismatch separados quando fornecidos;
+- `gain` não recebe eficiência de radiação novamente;
+- `realized-gain` não recebe novamente mismatch/eficiência já embutidos;
+- `unknown` + SWR/eficiência separados gera warning em vez de dupla contagem silenciosa;
+- cabo integrado já incluído no ganho medido não é descontado novamente quando metadado indicar isso.
+
+### RF — diversity
+
+- branches calculados separadamente;
+- diversity de seleção escolhe melhor branch calculado conforme contrato;
+- ganhos não são somados como array coerente;
+- dados incompletos de um branch não contaminam silenciosamente o outro;
+- limitation warning permanece presente.
+
+### RF — analógico/digital
+
+- sensibilidade preserva condição/mode;
+- modo digital diferente pode selecionar sensibilidade diferente;
+- analógico não usa threshold como garantia binária de qualidade real;
+- ausência de condição relevante reduz confiança/cobertura.
+
 ## 7. Compatibilidade e warnings
 
 Cada código de warning deve ter testes independentes.
@@ -206,7 +307,7 @@ Exemplos gerais:
 - `PROP_FRAME_DIAMETER_EXCEEDED`;
 - `INSUFFICIENT_DATA_*`.
 
-Warnings esperados para Bancada incluem equivalentes a:
+Warnings de Bancada:
 
 - `BENCH_VOLTAGE_MISSING`;
 - `BENCH_POWER_INCONSISTENT`;
@@ -218,9 +319,26 @@ Warnings esperados para Bancada incluem equivalentes a:
 - `BENCH_INTERPOLATION_OUT_OF_RANGE`;
 - `PITCH_SPEED_NOT_AIRCRAFT_SPEED`.
 
+Warnings RF mínimos:
+
+- `RF_TARGET_DISTANCE_INVALID`;
+- `RF_FREQUENCY_INVALID`;
+- `RF_RX_SENSITIVITY_MISSING`;
+- `RF_LINK_MARGIN_MISSING`;
+- `RF_ANTENNA_GAIN_KIND_UNKNOWN`;
+- `RF_POSSIBLE_DOUBLE_COUNTED_ANTENNA_LOSS`;
+- `RF_SWR_INVALID`;
+- `RF_POLARIZATION_UNKNOWN`;
+- `RF_POLARIZATION_MISMATCH`;
+- `RF_FREE_SPACE_ONLY_MODEL`;
+- `RF_DIVERSITY_MODEL_SIMPLIFIED`;
+- `RF_REQUIRED_TX_POWER_EXCEEDS_SELECTED_VTX`;
+- `RF_DATA_COVERAGE_INCOMPLETE`;
+- `RF_REGULATORY_STATUS_NOT_CHECKED`.
+
 Testar limites exatamente iguais, imediatamente abaixo e imediatamente acima quando a regra tiver threshold.
 
-## 8. Perfis e scoring
+## 8. Perfis, recomendação e scoring
 
 Para cada perfil:
 
@@ -229,7 +347,16 @@ Para cada perfil:
 - incompatibilidade crítica aplica regra definida;
 - score explica contribuições;
 - dados ausentes reduzem cobertura/confiança;
-- Mini Long Range favorece eficiência/autonomia sobre potência bruta em fixtures projetadas para demonstrar essa diferença.
+- Mini Long Range favorece eficiência/autonomia sobre potência bruta em fixtures apropriadas.
+
+Para recomendação de propulsão:
+
+- cada candidato recalcula sua massa;
+- motor mais pesado aumenta hover requerido;
+- maior empuxo não vence automaticamente perfil de eficiência;
+- `danger` invalida candidato;
+- score/cobertura/confiança são independentes;
+- ranking é determinístico e explicável.
 
 ## 9. Golden fixtures
 
@@ -240,11 +367,12 @@ tests/fixtures/
 ├── projects/
 ├── components/
 ├── bench-curves/
+├── rf/
 ├── ingestion/
 └── profiles/
 ```
 
-Criar projetos/curvas de referência:
+Criar referências:
 
 - `minimal-valid-quad`;
 - `mini-long-range-reference`;
@@ -254,13 +382,15 @@ Criar projetos/curvas de referência:
 - `bench-valid-with-voltage`;
 - `bench-missing-voltage`;
 - `bench-ambiguous-units`;
-- `bench-interpolation-out-of-range`.
+- `bench-interpolation-out-of-range`;
+- `rf-basic-5g8-link`;
+- `rf-realized-gain-no-double-loss`;
+- `rf-diversity-selection`;
+- `rf-missing-sensitivity`.
 
-Fixtures de ingestão devem incluir HTML/imagens de teste próprias ou licenciadas para teste, sem depender da disponibilidade de sites externos no CI.
+Fixtures de ingestão devem usar conteúdo próprio/licenciado e não depender de internet pública no CI.
 
-Não copiar planilhas/imagens de terceiros como fixture redistribuível sem verificar permissão. Quando uma referência externa inspirar um caso, criar fixture sintética equivalente.
-
-Os números esperados devem ser documentados e revisados quando a versão do motor mudar.
+Não copiar planilhas/imagens de terceiros como fixture redistribuível sem permissão. Quando uma referência externa inspirar um caso, criar fixture sintética equivalente.
 
 ## 10. Regressão do motor
 
@@ -272,6 +402,8 @@ Quando alterar uma fórmula:
 4. documentar diferença esperada;
 5. não atualizar snapshots numericamente sem revisar a causa.
 
+Isso se aplica também a fórmulas RF (`FSPL`, SWR, conversões, solver inverso).
+
 ## 11. Property-based testing futuro
 
 Útil para invariantes:
@@ -282,7 +414,10 @@ Quando alterar uma fórmula:
 - pitch speed teórica cresce linearmente com RPM mantendo pitch;
 - interpolação retorna valor entre extremos para curva monotônica;
 - autonomia básica diminui quando corrente aumenta mantendo demais entradas;
-- TWR diminui quando massa aumenta mantendo empuxo.
+- TWR diminui quando massa aumenta mantendo empuxo;
+- FSPL cresce monotonicamente com distância/frequência positivas;
+- potência VTX requerida cresce com distância mantendo demais entradas;
+- maior ganho efetivo reduz potência requerida mantendo demais entradas.
 
 ## 12. Importação de arquivos e Bancada
 
@@ -299,15 +434,15 @@ Testes de JSON/CSV:
 - arquivo vazio;
 - duplicatas.
 
-Para CSV de bancada, cobrir adicionalmente:
+Para CSV de bancada:
 
 - preview antes de persistir;
-- cancelamento não altera o banco;
-- cabeçalho `Aceleração` pode exigir mapeamento para `throttlePercent`, sem alterar semântica física;
-- `Empuxo (100g)` é tratado como unidade/escala ambígua até confirmação/regra confiável;
-- coluna `Eficiência` sem unidade não é assumida automaticamente como percentual nem `gf/W`;
-- tensão ausente não é substituída por nominal silenciosamente;
-- power/efficiency derivados só aparecem quando entradas válidas existem.
+- cancelamento não altera banco;
+- `Aceleração` exige mapeamento para `throttlePercent` sem mudar semântica;
+- `Empuxo (100g)` permanece ambíguo até confirmação;
+- `Eficiência` sem unidade não é assumida como percentual nem `gf/W`;
+- tensão ausente não é substituída silenciosamente;
+- derivados só aparecem com entradas válidas.
 
 ## 13. Ingestão por URL e multimodal
 
@@ -315,84 +450,63 @@ Seguir `ASSISTED_INGESTION.md` e `MANUFACTURER_SCRAPING.md`.
 
 ### Segurança de fetch
 
-Testar obrigatoriamente:
+Testar:
 
-- rejeição de `file:`, `ftp:` e protocolos não permitidos;
+- protocolos não permitidos;
 - loopback IPv4/IPv6;
 - redes privadas/link-local;
-- redirect público → destino privado;
-- resolução/rebinding quando a implementação exigir revalidação;
+- redirect público → privado;
+- rebinding/revalidação quando aplicável;
 - excesso de redirects;
 - timeout;
 - payload acima do limite;
-- MIME declarado diferente do conteúdo quando detectável;
-- imagem/documento excessivamente grande;
-- quantidade excessiva de assets;
-- falha parcial sem persistência autoritativa indevida.
+- MIME inconsistente;
+- assets excessivos;
+- falha parcial sem publicação indevida.
 
 ### Extração determinística
 
-- JSON-LD válido;
+- JSON-LD;
 - tabela HTML;
-- unidades pt-BR/internacionais;
+- unidades;
 - campo ausente permanece ausente;
 - valor ambíguo não vira número silenciosamente;
-- valor bruto e normalizado são preservados.
+- raw/normalized preservados.
 
 ### IA textual/visual
 
-Usar adapter fake/determinístico nos testes principais; não depender de um modelo Ollama real no CI unitário.
+Usar adapter fake nos testes principais; não depender de Ollama real no CI unitário.
 
-Cobrir:
-
-- saída válida;
-- JSON/schema inválido;
-- campo extra não permitido;
-- timeout/cancelamento;
-- provider indisponível;
-- modelo sem capability visual;
-- imagem técnica → campos esperados no staging;
-- confidence alta não publica automaticamente;
-- prompt injection presente no conteúdo remoto não altera permissões/fluxo;
-- provider não recebe credenciais/acesso SQL.
+Cobrir schema inválido, timeout, provider indisponível, modelo sem visão, staging, prompt injection e ausência de acesso SQL.
 
 ### Evidência e conflitos
 
-- campo extraído aponta para source/asset;
-- região de imagem opcional é validada quando presente;
-- HTML e imagem com mesmo valor/unidade equivalente não criam falso conflito;
-- HTML `60 mΩ` × imagem `64 mΩ` cria conflito/revisão;
-- valores diferentes sob condições distintas não são achatados em um único campo;
-- decisão de revisão mantém histórico;
-- reprocessamento por modelo diferente não sobrescreve revisão publicada.
+- campo aponta para source/asset;
+- HTML/imagem equivalentes não criam conflito falso;
+- valores divergentes criam revisão;
+- condições distintas não são achatadas;
+- reprocessamento não sobrescreve publicação.
 
-### Extraído versus derivado
+### Dados RF importados
 
-- `KV` extraído permanece dado da fonte;
-- `Kt` calculado recebe `formulaId`/proveniência de cálculo;
-- cálculo derivado não é persistido como declaração do fabricante;
-- warning de consistência não altera automaticamente valores importados.
-
-### Gráficos em imagem
-
-Quando digitalização for implementada:
-
-- eixos/unidades ausentes impedem promoção automática;
-- escala logarítmica é tratada explicitamente;
-- pontos ficam ligados ao asset/região/método;
-- CSV/tabela original tem preferência sobre pontos digitalizados;
-- curva digitalizada não recebe automaticamente confiança de medição alta.
+- potência VTX mantém modo/condição;
+- sensibilidade VRX mantém modo/condição;
+- ganho da antena mantém frequência e `gainKind`;
+- `2 dBi` sem contexto não recebe semântica inventada;
+- SWR/eficiência extraídos ficam separados e rastreáveis.
 
 ## 14. Persistência
 
 - save/get/list/delete;
-- autosave não perde alteração final;
-- migration mantém dados;
-- falha de storage é apresentada sem corromper estado em memória;
-- componentes referenciados não desaparecem silenciosamente;
-- staging e catálogo publicado permanecem separados;
-- bench test e samples mantêm integridade referencial;
-- object storage e metadados PostgreSQL não ficam inconsistentes após falha transacional/compensação prevista.
+- autosave;
+- migrations;
+- falha de storage sem corrupção;
+- referências preservadas;
+- staging/publicado separados;
+- bench tests/samples íntegros;
+- object storage/metadata coerentes;
+- `targetFpvRangeKm` e configurações RF persistidas quando o usuário optar;
+- resultados RF persistidos/exportados guardam versão e inputs necessários à reprodução.
 
 ## 15. UI
 
@@ -401,45 +515,49 @@ Testar comportamento, não implementação interna.
 Exemplos:
 
 - projeto vazio mostra próximo passo;
-- número sem unidade não é aceito/renderizado como métrica final;
+- número sem unidade não vira métrica final;
 - dados insuficientes não aparecem como zero;
 - `danger` tem texto além de cor;
-- modal de fórmula tem foco correto;
-- formulário apresenta mensagem associada ao campo inválido;
-- revisão de import mostra fonte/evidência e conflito sem depender apenas de cor;
-- Bancada mostra tabela com unidades e estado/proveniência;
-- valor derivado abre explicação da fórmula;
-- pitch speed aparece como teórica e com aviso;
-- não existe gráfico padrão colocando A, gf, RPM e `gf/W` numa única escala Y;
-- pontos interpolados são distinguíveis dos medidos.
+- “Como foi calculado?” abre fórmula/inputs;
+- Bancada mostra tabela/unidades/proveniência;
+- pitch speed é teórica;
+- gráfico não mistura unidades incompatíveis por padrão;
+- pontos interpolados diferem de medidos;
+- formulário RF valida km/MHz/dBm/dBi/dB corretamente;
+- resultado RF exibe espaço livre explicitamente;
+- `pass/borderline/fail` possui texto e números, não apenas cor;
+- realized gain não gera perda duplicada na explicação;
+- vídeo FPV não é rotulado como alcance de controle;
+- potência requerida não é rotulada como “legal” ou “permitida”.
 
 ## 16. Temas
 
-Testar pelo menos:
+Testar:
 
-- theme system;
+- system;
 - light;
 - dark;
-- persistência da preferência;
-- ausência de cores hardcoded em componentes críticos via lint/review.
+- persistência;
+- ausência de cores hardcoded em componentes críticos.
 
 ## 17. Cobertura
 
-Cobertura percentual isolada não é objetivo suficiente. Requisito do motor:
+Cobertura percentual isolada não é objetivo suficiente.
+
+Requisitos:
 
 - 100% das fórmulas/regras críticas possuem casos explícitos;
-- branches de validação e warnings críticos são cobertos;
+- branches de validação/warnings críticos cobertos;
 - fixtures de referência existem.
 
-Para Bancada, `V × I`, `gf/W`, pitch speed, unidade ambígua, tensão ausente e bloqueio de extrapolação são caminhos críticos.
+Caminhos críticos:
 
-Para ingestão, controles anti-SSRF, staging/publicação e validação de schema são caminhos críticos e exigem casos explícitos.
-
-Threshold automatizado pode ser adotado depois, sem substituir revisão de casos.
+- Bancada: `V×I`, `gf/W`, pitch speed, unidade ambígua, tensão ausente, extrapolação;
+- ingestão: anti-SSRF, staging/publicação, schema;
+- recomendador: massa por candidato, hard constraints, score/cobertura/confiança;
+- RF: mW/dBm, FSPL, solver, SWR, gain semantics, sensitivity, diversity, free-space warning.
 
 ## 18. CI futuro
-
-Pipeline mínimo:
 
 ```text
 install
@@ -450,21 +568,25 @@ install
 → build
 ```
 
-Adicionar E2E conforme estabilidade. Testes de ingestão não devem depender de internet pública no CI.
+Adicionar E2E conforme estabilidade. Testes de ingestão não devem depender de internet pública.
 
 ## 19. Critério de release
 
-Não liberar versão marcada como estável se:
+Não liberar versão estável se:
 
 - teste crítico falha;
 - fórmula mudou sem versão/documentação;
 - import/migration pode causar perda silenciosa;
-- análise apresenta estimativa como medição;
+- estimativa aparece como medição;
 - Bancada apresenta `gf/W` como percentual;
-- pitch speed é apresentada como velocidade real/máxima do drone;
-- curva pode extrapolar silenciosamente;
-- gráfico de bancada usa escala única enganosa para grandezas incompatíveis por padrão;
-- dado extraído por IA pode ser publicado sem staging/revisão prevista;
-- fetch remoto permite acesso indevido a rede interna;
-- evidência de campos importados é perdida;
-- existe regressão conhecida de compatibilidade elétrica.
+- pitch speed aparece como velocidade real/máxima;
+- curva extrapola silenciosamente;
+- gráfico de bancada usa escala única enganosa;
+- IA publica sem staging/revisão;
+- fetch remoto alcança rede interna;
+- evidência de import é perdida;
+- existe regressão de compatibilidade elétrica;
+- link budget conta perdas de antena duas vezes;
+- alcance RF é apresentado como garantido;
+- potência teórica é apresentada como automaticamente autorizada;
+- link FPV é confundido com rádio-controle.
