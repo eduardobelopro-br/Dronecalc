@@ -1,6 +1,6 @@
 # User Stories — DroneCalc
 
-**Versão:** 0.2
+**Versão:** 0.3
 
 ## 1. Objetivo
 
@@ -276,7 +276,78 @@ Como usuário, quero que o sistema seja transparente quando não possui dados pa
 - cruzeiro não é inventado como porcentagem fixa de hover;
 - ranking/resultados são limitados conforme a falta de dados.
 
-## US-24 — Otimização global futura
+## US-24 — Definir alcance FPV desejado
+
+Como operador, quero informar quantos quilômetros pretendo afastar o drone para avaliar se meu sistema de vídeo possui margem teórica suficiente.
+
+**Aceite:**
+
+- aceita `targetDistanceKm > 0`;
+- aceita frequência/canal real quando conhecido;
+- permite selecionar VTX, VRX/óculos e antenas do catálogo ou preencher manualmente;
+- exige sensibilidade para concluir fechamento do link;
+- margem desejada é configurável e não tratada como constante física universal;
+- resultado informa que o modelo básico é de espaço livre.
+
+## US-25 — Calcular link budget FPV
+
+Como operador, quero saber a potência recebida e a margem do link na distância desejada.
+
+**Aceite:**
+
+- calcula FSPL;
+- calcula potência recebida em dBm;
+- mostra sensibilidade e condição usadas;
+- mostra margem disponível e headroom após margem desejada;
+- exibe `pass/borderline/fail/insufficient-data` conforme regra versionada;
+- permite abrir “Como foi calculado?”.
+
+## US-26 — Dimensionar potência mínima de VTX
+
+Como operador, quero saber qual potência teórica de VTX seria necessária para a distância-alvo.
+
+**Aceite:**
+
+- resolve potência mínima em dBm;
+- converte para mW;
+- calcula EIRP quando dados permitirem;
+- não sugere que a potência calculada é automaticamente legal/autorizada;
+- não apresenta o valor como garantia de alcance real.
+
+## US-27 — Usar dados corretos de antena
+
+Como usuário avançado, quero que o DroneCalc não conte perdas de antena duas vezes.
+
+**Aceite:**
+
+- distingue `directivity`, `gain`, `realized-gain` e `unknown`;
+- realized gain não recebe novamente mismatch/eficiência já incluídos;
+- SWR inválido é rejeitado;
+- gain kind desconhecido com perdas separadas gera warning;
+- polarização é preservada e não recebe perda inventada sem modelo/dado.
+
+## US-28 — Avaliar diversity do VRX
+
+Como usuário com óculos diversity, quero analisar minhas antenas sem somar ganhos de forma incorreta.
+
+**Aceite:**
+
+- cada branch é calculado separadamente;
+- diversity de seleção pode usar o melhor branch sob as hipóteses existentes;
+- ganhos de duas antenas não são somados como array coerente;
+- limitação do modelo simplificado é exibida.
+
+## US-29 — Separar vídeo FPV de rádio-controle
+
+Como usuário Long Range, quero entender que alcance de vídeo e alcance do controle são links diferentes.
+
+**Aceite:**
+
+- análise FPV não declara alcance do rádio-controle;
+- warnings e resultados identificam explicitamente o link analisado;
+- futuro módulo RC pode reutilizar núcleo RF sem misturar sensibilidade/protocolo automaticamente.
+
+## US-30 — Otimização global futura
 
 Como usuário, quero informar objetivos e receber configurações candidatas explorando um espaço muito maior de combinações.
 
@@ -288,6 +359,7 @@ Como usuário, quero informar objetivos e receber configurações candidatas exp
 - trade-offs são explicados;
 - fontes e confiança acompanham resultados;
 - pode dimensionar bateria/constraints iterativamente com critério de convergência;
+- pode incluir constraint de alcance FPV mantendo física RF separada da propulsão;
 - usuário pode transformar candidato em projeto editável.
 
 ## Uso em issues
