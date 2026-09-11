@@ -11,53 +11,88 @@ Este diretório contém a fonte de verdade do produto e da implementação do Dr
 5. [`ARCHITECTURE.md`](ARCHITECTURE.md) — estrutura técnica e separação de responsabilidades.
 6. [`DOMAIN_MODEL.md`](DOMAIN_MODEL.md) — entidades, tipos e contratos centrais.
 7. [`CALCULATION_ENGINE.md`](CALCULATION_ENGINE.md) — fórmulas, hipóteses, proveniência e confiança.
-8. [`FLIGHT_PROFILES.md`](FLIGHT_PROFILES.md) — estilos de voo e critérios de avaliação.
-9. [`NEXO_DESIGN_SYSTEM.md`](NEXO_DESIGN_SYSTEM.md) — identidade visual herdada do NEXO.
-10. [`UX_SPEC.md`](UX_SPEC.md) — fluxos, navegação e estados de interface.
-11. [`DATA_MODEL.md`](DATA_MODEL.md) — persistência, importação/exportação e versionamento.
-12. [`COMPONENT_CATALOG.md`](COMPONENT_CATALOG.md) — categorias, campos e dados de bancada.
-13. [`TEST_STRATEGY.md`](TEST_STRATEGY.md) — testes unitários, integração e validação numérica.
-14. [`SAFETY_AND_LIMITATIONS.md`](SAFETY_AND_LIMITATIONS.md) — limites, incerteza e comunicação responsável.
-15. [`RELEASE_CRITERIA.md`](RELEASE_CRITERIA.md) — gates para etapas, MVP e releases.
-16. [`ROADMAP.md`](ROADMAP.md) — fases e dependências de implementação.
-17. [`DEVELOPMENT.md`](DEVELOPMENT.md) — padrões de desenvolvimento.
-18. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato e prompts para agentes de IA.
-19. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
-20. [`adr/`](adr/README.md) — Architecture Decision Records.
+8. [`PHYSICS_ENGINE.md`](PHYSICS_ENGINE.md) — modelo físico avançado de bateria, ESC, motor, torque, hélice, ponto de operação e empuxo.
+9. [`BENCH_DATA_WORKSPACE.md`](BENCH_DATA_WORKSPACE.md) — seção Bancada, curvas motor+hélíce, métricas derivadas, gráficos, importação e regras de interpretação.
+10. [`PROPULSION_RECOMMENDATION.md`](PROPULSION_RECOMMENDATION.md) — recálculo de massa por candidato, perfil operacional e ranking explicável de motor+hélíce+bateria/tensão.
+11. [`FPV_LINK_BUDGET.md`](FPV_LINK_BUDGET.md) — distância-alvo, FSPL, VTX/VRX/antenas, margens, potência mínima teórica e semântica correta de ganhos/perdas RF.
+12. [`FLIGHT_PROFILES.md`](FLIGHT_PROFILES.md) — estilos de voo e critérios de avaliação.
+13. [`NEXO_DESIGN_SYSTEM.md`](NEXO_DESIGN_SYSTEM.md) — identidade visual herdada do NEXO.
+14. [`UX_SPEC.md`](UX_SPEC.md) — fluxos, navegação e estados de interface.
+15. [`DATA_MODEL.md`](DATA_MODEL.md) — persistência, importação/exportação e versionamento.
+16. [`ASSISTED_INGESTION.md`](ASSISTED_INGESTION.md) — cadastro por URL, extração de imagens por IA, evidência, staging e reconciliação de fontes.
+17. [`MANUFACTURER_SCRAPING.md`](MANUFACTURER_SCRAPING.md) — scraping controlado de páginas oficiais, PDFs/assets, snapshots, segurança e separação scraper × IA.
+18. [`COMPONENT_CATALOG.md`](COMPONENT_CATALOG.md) — categorias, campos e dados de bancada.
+19. [`TEST_STRATEGY.md`](TEST_STRATEGY.md) — testes unitários, integração e validação numérica.
+20. [`SAFETY_AND_LIMITATIONS.md`](SAFETY_AND_LIMITATIONS.md) — limites, incerteza e comunicação responsável.
+21. [`RELEASE_CRITERIA.md`](RELEASE_CRITERIA.md) — gates para etapas, MVP e releases.
+22. [`ROADMAP.md`](ROADMAP.md) — fases e dependências de implementação.
+23. [`DEVELOPMENT.md`](DEVELOPMENT.md) — padrões de desenvolvimento.
+24. [`AI_IMPLEMENTATION_GUIDE.md`](AI_IMPLEMENTATION_GUIDE.md) — contrato geral para agentes de IA.
+25. [`prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md`](prompts/ETAPA_1A_BOOTSTRAP_FULLSTACK.md) — primeira orientação executável para a IA implementadora.
+26. [`prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md`](prompts/ETAPA_7_BENCH_DATA_WORKSPACE.md) — orientação futura para implementar a seção Bancada após suas dependências.
+27. [`prompts/ETAPA_8_PROPULSION_RECOMMENDATION.md`](prompts/ETAPA_8_PROPULSION_RECOMMENDATION.md) — orientação futura para implementar o recomendador de propulsão orientado ao uso.
+28. [`prompts/ETAPA_9_FPV_LINK_BUDGET.md`](prompts/ETAPA_9_FPV_LINK_BUDGET.md) — orientação futura para implementar o cálculo de alcance FPV/link budget.
+29. [`GLOSSARY.md`](GLOSSARY.md) — terminologia técnica padronizada.
+30. [`adr/`](adr/README.md) — Architecture Decision Records.
 
 Na raiz do repositório também existem:
 
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — guia de contribuição;
 - [`../CHANGELOG.md`](../CHANGELOG.md) — histórico de mudanças relevantes.
 
+## Arquitetura vigente
+
+O MVP ampliado adota:
+
+- Web React/TypeScript;
+- API Node.js/TypeScript;
+- PostgreSQL como fonte principal de dados;
+- MinIO/S3-compatible para imagens e documentos;
+- Ollama atrás de interface substituível para IA local, incluindo capacidade multimodal quando o modelo configurado suportar visão;
+- IndexedDB apenas para cache/drafts/preferências/offline auxiliar;
+- calculation engine e domínio independentes de UI, banco e IA;
+- duas rotas de propulsão complementares: dados de bancada como referência preferencial e Physics Engine teórico somente quando houver parâmetros suficientes;
+- workspace Bancada como interface auditável para curvas motor+hélíce e seus dados derivados;
+- recomendador de propulsão que recalcula a massa de cada candidato e aplica compatibilidade + perfil de uso antes do ranking;
+- núcleo RF/link budget independente da UI, com FSPL, dBm/mW, SWR e solver inverso auditáveis;
+- cálculo de alcance FPV apresentado como estimativa de espaço livre, separado do link de rádio-controle.
+
+A mudança de infraestrutura é detalhada no [`adr/0002-postgresql-object-storage-ollama.md`](adr/0002-postgresql-object-storage-ollama.md). O pipeline geral de cadastro por URL e imagens é especificado em [`ASSISTED_INGESTION.md`](ASSISTED_INGESTION.md); a coleta direta de páginas oficiais de fabricantes é detalhada em [`MANUFACTURER_SCRAPING.md`](MANUFACTURER_SCRAPING.md); a interpretação/visualização de curvas é normatizada por [`BENCH_DATA_WORKSPACE.md`](BENCH_DATA_WORKSPACE.md); a seleção orientada ao uso é normatizada por [`PROPULSION_RECOMMENDATION.md`](PROPULSION_RECOMMENDATION.md); e o planejamento de enlace de vídeo é normatizado por [`FPV_LINK_BUDGET.md`](FPV_LINK_BUDGET.md).
+
 ## Hierarquia de autoridade
 
 Quando documentos entrarem em conflito, utilizar esta prioridade:
 
 1. `PRD.md` para intenção de produto e escopo.
-2. `PRODUCT_SPEC.md` para comportamento funcional.
-3. `CALCULATION_ENGINE.md` para regras matemáticas.
-4. `DOMAIN_MODEL.md` e `DATA_MODEL.md` para contratos de dados.
+2. `PRODUCT_SPEC.md` para comportamento funcional geral.
+3. `CALCULATION_ENGINE.md`, `PHYSICS_ENGINE.md`, `BENCH_DATA_WORKSPACE.md`, `PROPULSION_RECOMMENDATION.md` e `FPV_LINK_BUDGET.md` para regras matemáticas, propulsão física, semântica dos dados de bancada, recomendação técnica e link budget RF.
+4. `DOMAIN_MODEL.md`, `DATA_MODEL.md`, `ASSISTED_INGESTION.md` e `MANUFACTURER_SCRAPING.md` para contratos de dados, persistência e ingestão.
 5. `ARCHITECTURE.md` e ADRs para limites e decisões técnicas.
 6. `NEXO_DESIGN_SYSTEM.md` e `UX_SPEC.md` para apresentação e interação.
 7. `ROADMAP.md` para sequência de implementação.
 
-Histórias de usuário e matriz de rastreabilidade não devem contrariar documentos superiores; servem para operacionalizá-los.
+Prompts de implementação operacionalizam os documentos superiores e nunca devem contradizê-los silenciosamente.
 
 ## Regra de atualização
 
 Mudanças que alterem uma regra superior devem atualizar os documentos dependentes no mesmo pull request. Em especial:
 
-- fórmula alterada → `CALCULATION_ENGINE.md`, testes e changelog quando material;
-- schema alterado → `DOMAIN_MODEL.md`/`DATA_MODEL.md`, migração e testes;
+- fórmula geral alterada → `CALCULATION_ENGINE.md`, testes e changelog quando material;
+- modelo de bateria/motor/torque/hélice/propulsão alterado → `PHYSICS_ENGINE.md`, `CALCULATION_ENGINE.md` quando aplicável, fixtures físicos e testes;
+- semântica/importação/visualização de curvas de bancada alterada → `BENCH_DATA_WORKSPACE.md`, testes e roadmap quando aplicável;
+- recomendação/seleção de propulsão alterada → `PROPULSION_RECOMMENDATION.md`, perfis, testes, rastreabilidade e roadmap quando aplicável;
+- regra de FSPL/link budget/ganho/SWR alterada → `FPV_LINK_BUDGET.md`, testes, rastreabilidade e roadmap quando aplicável;
+- schema alterado → `DOMAIN_MODEL.md`/`DATA_MODEL.md`, migration e testes;
+- pipeline de ingestão alterado → `ASSISTED_INGESTION.md`, `MANUFACTURER_SCRAPING.md` quando aplicável, segurança, testes e roadmap quando a sequência mudar;
 - requisito alterado → PRD/Product Spec, user stories e rastreabilidade;
 - arquitetura alterada → `ARCHITECTURE.md` e ADR;
 - UI/identidade alterada → `NEXO_DESIGN_SYSTEM.md`/`UX_SPEC.md`;
-- fase concluída → `ROADMAP.md` e changelog/relatório da etapa.
+- etapa concluída → `ROADMAP.md` e relatório da etapa;
+- orientação da IA alterada → prompt correspondente e `AI_IMPLEMENTATION_GUIDE.md` quando a regra for geral.
 
 ## Estado da especificação
 
-Versão inicial: **0.1**  
+Versão da arquitetura/roadmap: **0.8**  
 Status: **planejamento / pré-MVP**
 
-A documentação deve evoluir junto com o código. Não manter decisões relevantes apenas em issues, chats ou prompts de IA.
+A documentação deve evoluir junto com o código. Não manter decisões relevantes apenas em issues, chats ou prompts temporários.

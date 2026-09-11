@@ -1,39 +1,57 @@
 # Modelo de Dados e Persistência — DroneCalc
 
-**Versão:** 0.1
+**Versão:** 0.3
 
 ## 1. Objetivo
 
-Definir como projetos, componentes, perfis e testes de bancada são persistidos, importados, exportados e migrados sem acoplar o domínio a uma tecnologia específica.
+Definir como projetos, componentes, evidências, imports, perfis e testes de bancada são persistidos, importados, exportados e migrados sem acoplar o domínio a uma tecnologia concreta.
 
-## 2. Estratégia MVP
+A ingestão detalhada de páginas, imagens e documentos é especificada em `ASSISTED_INGESTION.md`.
 
-Persistência local primeiro.
+## 2. Estratégia vigente
 
-Recomendação:
+O MVP ampliado adota:
 
-- IndexedDB como armazenamento principal;
-- repositórios abstratos na aplicação;
+- PostgreSQL como fonte principal de dados persistidos;
+- repositories/adapters entre application/domain e banco;
+- MinIO/S3-compatible para imagens e documentos;
+- IndexedDB apenas para cache, drafts, preferências e suporte offline auxiliar;
 - JSON versionado para export/import;
 - CSV para importação de tabelas de bancada;
-- nenhuma conta obrigatória.
+- staging obrigatório para dados extraídos por URL/IA;
+- evidência por campo para dados extraídos de HTML, imagens ou documentos;
+- separação explícita entre valor declarado/extraído e valor derivado pelo calculation/physics engine.
 
-`localStorage` pode guardar preferências pequenas (tema, unidade), mas não deve ser a base de projetos complexos.
+Essa decisão substitui a estratégia inicial de IndexedDB como armazenamento principal e está registrada no ADR 0002.
 
-## 3. Stores lógicos
+## 3. Agregados/áreas lógicas
 
-Independentemente do banco concreto:
+O modelo físico será detalhado nas migrations, mas deve cobrir ao menos:
 
 - `projects`;
+- `project_components`;
 - `components`;
-- `benchTests`;
-- `flightProfiles`;
-- `settings`;
-- `migrations`/metadata.
+- `manufacturers`;
+- `component_variants` quando necessário;
+- `component_revisions` ou mecanismo equivalente de revisão;
+- `bench_tests`;
+- `bench_test_samples`;
+- `flight_profiles`/versões quando persistidos;
+- `evidence_sources`;
+- `imports`/`import_jobs`;
+- `extraction_runs` quando necessário;
+- `extracted_fields`/staging;
+- `field_evidence` ou relação equivalente;
+- `source_conflicts`/decisões de revisão quando necessário;
+- `stored_objects` ou metadados equivalentes de mídia;
+- `heuristics` e revisões futuras;
+- metadata de migrations/versionamento.
+
+Não é obrigatório usar esses nomes literalmente. O schema deve ser normalizado na medida em que consultas, integridade e manutenção se beneficiem disso.
 
 ## 4. Projeto persistido
 
-Exemplo conceitual:
+Exemplo conceitual de export, não schema SQL literal:
 
 ```json
 {
@@ -54,99 +72,202 @@ Exemplo conceitual:
 }
 ```
 
-## 5. Snapshots versus referências
+## 5. Catálogo versus instância no projeto
 
-Problema: um componente do catálogo pode mudar depois que um projeto foi criado.
+Catálogo e projeto são conceitos diferentes.
 
-Estratégia recomendada:
+- catálogo descreve um componente/revisão de referência;
+- projeto referencia esse componente;
+- overrides de massa, quantidade, posição ou parâmetros pertencem à instância do projeto;
+- alterar override não modifica silenciosamente o catálogo.
 
-- projeto referencia `componentId`;
-- ao executar análise, resolver versão atual;
-- para reprodutibilidade futura, permitir salvar `componentRevision` ou snapshot dos campos determinantes;
-- exportação de projeto deve incluir componentes necessários ou referências resolvíveis.
+Para reprodutibilidade, projeto/análise pode guardar `componentRevision` ou snapshot dos campos determinantes.
 
-No MVP, preferir export autocontido para evitar que um arquivo deixe de funcionar porque um catálogo mudou.
+## 6. PostgreSQL
 
-## 6. Versionamento de schema
+### 6.1 Princípios
 
-Todo objeto exportável relevante deve possuir `schemaVersion` inteiro.
+- chaves primárias estáveis;
+- foreign keys quando representarem integridade real;
+- constraints para invariantes simples;
+- tipos adequados para campos usados em filtros/cálculo;
+- JSONB apenas para metadados flexíveis;
+- migrations versionadas;
+- transações para operações multi-registro que precisem atomicidade;
+- índices baseados em consultas reais, não adicionados preventivamente sem evidência.
 
-Regras:
+### 6.2 IDs
 
-- mudanças compatíveis podem manter versão;
-- rename/removal/alteração semântica exige migração;
-- migrações são puras e testadas;
-- nunca sobrescrever dados persistidos antes de validar migração completa;
-- backups lógicos podem ser criados durante migrações de alto risco futuras.
+Usar UUID, ULID ou solução equivalente estável. A escolha final deve ser registrada na etapa de persistência. Não usar nome/modelo como chave primária.
 
-## 7. Versão do motor
+### 6.3 Datas
 
-Análises exportadas devem registrar `analysisVersion`/`calculationEngineVersion`.
+Persistir timestamps em UTC. Localização é responsabilidade da apresentação.
 
-Isso permite explicar por que o mesmo projeto pode produzir resultado diferente após melhoria de um modelo matemático.
+## 7. Object Storage
 
-## 8. Catálogo de componentes
+Imagens e documentos grandes ficam fora do PostgreSQL por padrão.
 
-Um registro de catálogo deve conter:
+Metadados persistidos podem incluir:
 
-- schemaVersion;
-- id estável;
-- tipo;
-- fabricante/modelo;
-- campos técnicos;
-- source metadata;
-- `custom`;
-- datas/revisões.
+```ts
+interface StoredObjectMetadata {
+  id: string
+  sourceId?: string
+  storageKey: string
+  originalUrl?: string
+  mimeType: string
+  sizeBytes: number
+  sha256?: string
+  width?: number
+  height?: number
+  createdAt: string
+}
+```
 
-Valores desconhecidos permanecem ausentes, não recebem defaults arbitrários.
+MinIO é a implementação local inicial. O contrato deve permitir storage S3-compatible futuro.
 
-## 9. Dados de bancada
+Assets provenientes de páginas externas devem manter ligação com o import job/evidência e passar por validação de destino, MIME, tamanho e hash conforme `ASSISTED_INGESTION.md`.
 
-Curvas são entidades independentes para evitar duplicar amostras em todo motor.
+## 8. Fontes e evidências
+
+Toda informação técnica importada deve poder indicar origem.
+
+Exemplo conceitual:
+
+```ts
+interface EvidenceSource {
+  id: string
+  kind: 'manufacturer' | 'measured' | 'user-provided' | 'article' | 'video' | 'other'
+  url?: string
+  title?: string
+  capturedAt?: string
+  notes?: string[]
+}
+```
+
+Uma fonte não é automaticamente confiável apenas por existir. Confiabilidade e completude são metadados distintos.
+
+Para ingestão multimodal, a evidência de um campo pode apontar adicionalmente para:
+
+- asset/imagem/documento específico;
+- tipo de origem (`html`, `json-ld`, `table`, `image`, `document`, `user`);
+- seletor/referência textual quando disponível;
+- região da imagem quando o método conseguir fornecê-la de forma defensável;
+- método de extração;
+- provider/modelo/prompt version quando IA for usada.
+
+## 9. Ingestão por URL e staging
+
+Dados extraídos nunca devem ser escritos diretamente como catálogo publicado.
+
+Fluxo:
+
+```text
+source
+→ import job
+→ evidence snapshot/metadata/assets
+→ extraction runs
+→ extracted fields
+→ normalization
+→ schema validation
+→ cross-source reconciliation
+→ needs_review
+→ approved/rejected
+→ published
+```
+
+Um campo extraído deve poder guardar:
+
+- valor bruto;
+- valor normalizado;
+- unidade;
+- método de extração;
+- evidência/origem;
+- confiança;
+- estado de revisão;
+- conflito com outra fonte quando aplicável.
+
+HTML, imagem e documento são evidências independentes. Se fornecerem valores diferentes para o mesmo campo, o sistema não sobrescreve nem escolhe silenciosamente um deles.
+
+## 10. IA/Ollama
+
+Resultados de IA são dados derivados do processo de extração, não autoridade.
+
+Persistir quando útil:
+
+- provider;
+- model;
+- model/version/tag identificável;
+- capabilities usadas, incluindo visão quando aplicável;
+- prompt/template version;
+- timestamp;
+- schema esperado;
+- resultado validado;
+- warnings/erros;
+- ligação à fonte/asset;
+- confiança reportada quando existir, sem tratá-la como aprovação.
+
+Não é necessário armazenar raciocínio interno do modelo.
+
+Modelo sem capability visual necessária deve falhar explicitamente; não pode registrar que uma imagem foi analisada quando não foi.
+
+## 11. Dados de bancada
+
+Curvas são entidades independentes.
 
 Chave lógica inclui:
 
-- motor;
-- hélice/descrição;
-- tensão/condição;
+- motor/revisão;
+- hélice/revisão ou descrição estruturada;
+- tensão/células/condições;
 - fonte;
 - revisão.
 
 A mesma combinação pode possuir múltiplos testes de fontes diferentes. Não mesclar automaticamente.
 
-## 10. Perfis de voo
+Samples típicos:
 
-Perfis padrão podem ser distribuídos junto com a aplicação e carregados de JSON/TS validado.
-
-Campos:
-
-- schemaVersion;
-- profileVersion;
-- slug;
-- priorities;
-- targets;
-- scoring rules.
-
-Projetos devem registrar a versão utilizada ou snapshot dos objetivos derivados.
-
-## 11. Settings
-
-Preferências típicas:
-
-```ts
-interface UserSettings {
-  schemaVersion: number
-  theme: 'system' | 'light' | 'dark'
-  locale: 'pt-BR' | string
-  preferredUnits: UnitPreferences
-}
+```text
+throttle_percent
+thrust
+current
+voltage
+power
+rpm
 ```
 
-Hipóteses técnicas globais devem ser usadas com cautela. Se influenciarem um resultado, precisam aparecer na análise e idealmente ser copiadas para o projeto ou analysis context.
+O schema real deve usar nomes/unidades inequívocos e constraints físicas adequadas.
 
-## 12. Exportação JSON
+Curvas/pontos digitalizados de imagens devem manter origem específica `digitized-from-image` ou equivalente e não são promovidos automaticamente a medição de alta confiança.
 
-Formato sugerido:
+## 12. Perfis e heurísticas
+
+Perfis e heurísticas devem ser versionáveis.
+
+Projetos/análises devem registrar a versão usada ou snapshot dos objetivos derivados quando necessário para reprodutibilidade.
+
+Heurística não deve compartilhar o mesmo status semântico de dado medido/compatibilidade validada.
+
+## 13. Versionamento de schema
+
+Todo objeto exportável relevante possui `schemaVersion`.
+
+Regras:
+
+- rename/removal/mudança semântica exige migration;
+- migration deve ser testada;
+- banco novo deve chegar ao schema atual do zero;
+- upgrade suportado deve ser reproduzível;
+- não destruir dados antes de validação adequada.
+
+## 14. Versão do motor
+
+Análises exportadas devem registrar `calculationEngineVersion`/formula IDs relevantes.
+
+## 15. Exportação JSON
+
+Formato conceitual:
 
 ```ts
 interface DroneCalcExport {
@@ -162,103 +283,110 @@ interface DroneCalcExport {
 }
 ```
 
-O export deve ser autocontido sempre que possível.
+O export de projeto deve ser autocontido sempre que razoável.
 
-## 13. Importação JSON
-
-Pipeline obrigatório:
+## 16. Importação JSON
 
 ```text
 arquivo
-  ↓
-parse seguro
-  ↓
-validação de formato
-  ↓
-migração por schemaVersion
-  ↓
-validação semântica
-  ↓
-preview/identificação de conflitos
-  ↓
-persistência
+→ parse seguro
+→ validação de formato
+→ migration por schemaVersion
+→ validação semântica
+→ preview/conflitos
+→ transação de persistência
 ```
 
-Nunca persistir parcialmente antes de todas as validações necessárias.
+Nunca persistir parcialmente antes das validações necessárias.
 
-## 14. Importação CSV de bancada
+## 17. Importação CSV de bancada
 
-Suportar mapeamento de colunas, pois fabricantes usam cabeçalhos diferentes.
-
-Campos-alvo:
+Campos-alvo típicos:
 
 - throttlePercent;
-- thrustG;
-- currentA;
-- voltageV;
-- powerW;
+- thrust;
+- current;
+- voltage;
+- power;
 - rpm.
 
-Fluxo:
+O importador deve solicitar/detectar unidades e converter explicitamente. Não assumir que `thrust` está em gramas.
 
-1. selecionar arquivo;
-2. detectar delimiter/headers quando possível;
-3. mapear colunas;
-4. escolher unidades de origem;
-5. mostrar preview convertido;
-6. validar;
-7. salvar teste.
+## 18. Conflitos/revisões
 
-Não assumir que `thrust` está em gramas; pode vir em kg, oz ou N.
+Se um componente com mesmo identificador lógico apresentar dados diferentes:
 
-## 15. IDs
-
-Usar identificadores estáveis gerados pela aplicação (UUID/ULID ou solução equivalente). Não usar nome/modelo como chave primária.
-
-## 16. Datas
-
-Persistir timestamps em ISO 8601 UTC. Localização é responsabilidade da apresentação.
-
-## 17. Deleção
-
-Ao excluir componente customizado referenciado por projetos:
-
-- impedir deleção destrutiva ou solicitar estratégia;
-- opção preferida: arquivar/soft-delete catálogo e preservar referência;
-- nunca deixar projeto silenciosamente inválido.
-
-No MVP, componente referenciado pode ser protegido contra exclusão definitiva.
-
-## 18. Conflitos de importação
-
-Se um export contém `componentId` já existente mas conteúdo diferente:
-
-- comparar revision/hash;
+- comparar revisão/hash/fonte;
+- comparar condição de ensaio antes de declarar conflito;
+- normalizar unidades antes de comparar valores;
 - não sobrescrever silenciosamente;
-- importar como revisão/nova cópia ou pedir estratégia na UI futura.
+- criar nova revisão/candidato ou pedir decisão;
+- manter histórico quando o dado anterior já fundamentou projeto/análise;
+- registrar decisão de revisão e evidências consideradas.
 
-## 19. Integridade
+Conflitos HTML × imagem × documento devem permanecer visíveis no staging até decisão explícita.
 
-Validar:
+## 19. Deleção
 
-- referências existentes;
-- quantidades positivas;
-- valores físicos mínimos;
-- versões suportadas;
+Preferir archive/soft-delete para catálogo referenciado.
+
+Não deixar projetos existentes com referência destruída silenciosamente.
+
+## 20. Integridade
+
+Validar ao menos:
+
+- referências;
 - IDs únicos;
-- curva com amostras válidas.
+- valores físicos permitidos;
+- versões suportadas;
+- curvas válidas;
+- status de staging/publicação;
+- metadados de object storage coerentes;
+- vínculo entre campo extraído e evidência;
+- impossibilidade de publicar diretamente um resultado bruto de IA sem passar pelo workflow previsto;
+- distinção entre dado extraído/declarado e dado calculado/derivado.
 
-## 20. Privacidade
+## 21. IndexedDB/local storage
 
-MVP local não exige envio de projetos para servidor. Se telemetria for adicionada futuramente, deve ser documentada e evitar coletar conteúdo de projetos sem necessidade/consentimento apropriado.
+IndexedDB pode guardar:
 
-## 21. Backup futuro
+- draft atual;
+- preferências e sessão local não sensível;
+- cache do catálogo;
+- último projeto aberto;
+- futura fila offline.
 
-Possibilidades:
+`localStorage` deve ser limitado a preferências pequenas quando apropriado.
 
-- export manual;
-- pacote ZIP com projetos/catálogo;
-- sincronização opcional com conta;
-- integração desktop.
+Nenhum dos dois deve conter secrets da API ou substituir a fonte autoritativa PostgreSQL quando online.
 
-Nada disso deve impedir o usuário de manter um export local legível e versionado.
+## 22. Privacidade e segurança
+
+- não guardar cookies/tokens capturados de páginas externas;
+- não expor credenciais PostgreSQL/MinIO no frontend;
+- dados importados por URL são não confiáveis até validação;
+- sanitizar conteúdo remoto antes de exibição;
+- imports com falha não deixam estado parcial inconsistente;
+- conteúdo remoto é dado não confiável e não pode alterar instruções/permissões do agente;
+- IA não recebe credenciais nem acesso SQL direto;
+- fetch de páginas/assets deve aplicar proteção anti-SSRF;
+- política de retenção de imagens/documentos deve considerar direitos e restrições da fonte.
+
+## 23. Backup futuro
+
+Planejar separadamente:
+
+- backup PostgreSQL;
+- backup/versionamento do object storage;
+- export manual de projetos;
+- retenção de snapshots/evidências;
+- recuperação testada.
+
+O usuário deve continuar podendo manter export local legível/versionado mesmo com backend.
+
+## 24. Decisão de implementação
+
+Detalhes como ORM/query builder, layout exato de tabelas, UUID versus ULID e estratégia de migration serão escolhidos na Etapa 2A com base em código real, documentação oficial e requisitos de consulta. Qualquer escolha estrutural relevante deve gerar ADR.
+
+O desenho das tabelas de ingestão deve implementar os invariantes de `ASSISTED_INGESTION.md`, mas a IA implementadora pode propor normalização/nomes diferentes quando a solução for mais eficiente e auditável.

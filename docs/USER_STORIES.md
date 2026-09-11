@@ -1,6 +1,6 @@
 # User Stories — DroneCalc
 
-**Versão:** 0.1
+**Versão:** 0.3
 
 ## 1. Objetivo
 
@@ -58,6 +58,7 @@ Como usuário, quero saber o impacto de cada peça na massa do drone.
 
 - mostra massa por linha e categoria;
 - mostra massa seca/bateria/payload/decolagem conforme definição;
+- atualiza ao adicionar/remover/substituir peças;
 - componente sem massa não vira 0 silenciosamente;
 - lista dados ausentes.
 
@@ -233,16 +234,132 @@ Como usuário, quero posicionar componentes e estimar CG.
 - CG parcial é identificado;
 - fixture simétrico retorna centro esperado.
 
-## US-21 — Otimização futura
+## US-21 — Recomendar conjunto de propulsão
 
-Como usuário, quero informar objetivos e receber configurações candidatas.
+Como usuário, quero que o DroneCalc considere as peças que já escolhi e o uso pretendido para recomendar conjuntos de propulsão adequados e eficientes.
+
+**Aceite:**
+
+- candidato é motor + hélice + bateria/tensão, incluindo ESC quando necessário à análise;
+- cada candidato recebe uma variante virtual própria;
+- massa de decolagem é recalculada incluindo a massa dos próprios componentes candidatos;
+- empuxo requerido/hover/TWR são recalculados após a massa;
+- compatibilidade elétrica/mecânica é avaliada antes do score;
+- dados de bancada aprovados têm prioridade quando aplicáveis;
+- conjunto de maior empuxo máximo não vence automaticamente;
+- perfil de voo/uso influencia o ranking;
+- candidato com dados insuficientes não recebe valores físicos inventados;
+- aplicar a recomendação ao projeto exige ação explícita.
+
+## US-22 — Entender o ranking de propulsão
+
+Como usuário, quero entender por que um conjunto foi recomendado acima de outro.
+
+**Aceite:**
+
+- mostra massa final do candidato;
+- mostra consumo/eficiência/hover/TWR/autonomia disponíveis;
+- mostra warnings e hard constraints;
+- mostra `profileScore`, cobertura e confiança separadamente;
+- apresenta principais vantagens/desvantagens;
+- informa curva/modelo/perfil e versões relevantes;
+- `danger` nunca é escondido por score.
+
+## US-23 — Perfil operacional incompleto
+
+Como usuário, quero que o sistema seja transparente quando não possui dados para todos os regimes do meu uso.
+
+**Aceite:**
+
+- fase sem dado/modelo não é tratada como corrente zero;
+- cobertura incompleta é mostrada;
+- cruzeiro não é inventado como porcentagem fixa de hover;
+- ranking/resultados são limitados conforme a falta de dados.
+
+## US-24 — Definir alcance FPV desejado
+
+Como operador, quero informar quantos quilômetros pretendo afastar o drone para avaliar se meu sistema de vídeo possui margem teórica suficiente.
+
+**Aceite:**
+
+- aceita `targetDistanceKm > 0`;
+- aceita frequência/canal real quando conhecido;
+- permite selecionar VTX, VRX/óculos e antenas do catálogo ou preencher manualmente;
+- exige sensibilidade para concluir fechamento do link;
+- margem desejada é configurável e não tratada como constante física universal;
+- resultado informa que o modelo básico é de espaço livre.
+
+## US-25 — Calcular link budget FPV
+
+Como operador, quero saber a potência recebida e a margem do link na distância desejada.
+
+**Aceite:**
+
+- calcula FSPL;
+- calcula potência recebida em dBm;
+- mostra sensibilidade e condição usadas;
+- mostra margem disponível e headroom após margem desejada;
+- exibe `pass/borderline/fail/insufficient-data` conforme regra versionada;
+- permite abrir “Como foi calculado?”.
+
+## US-26 — Dimensionar potência mínima de VTX
+
+Como operador, quero saber qual potência teórica de VTX seria necessária para a distância-alvo.
+
+**Aceite:**
+
+- resolve potência mínima em dBm;
+- converte para mW;
+- calcula EIRP quando dados permitirem;
+- não sugere que a potência calculada é automaticamente legal/autorizada;
+- não apresenta o valor como garantia de alcance real.
+
+## US-27 — Usar dados corretos de antena
+
+Como usuário avançado, quero que o DroneCalc não conte perdas de antena duas vezes.
+
+**Aceite:**
+
+- distingue `directivity`, `gain`, `realized-gain` e `unknown`;
+- realized gain não recebe novamente mismatch/eficiência já incluídos;
+- SWR inválido é rejeitado;
+- gain kind desconhecido com perdas separadas gera warning;
+- polarização é preservada e não recebe perda inventada sem modelo/dado.
+
+## US-28 — Avaliar diversity do VRX
+
+Como usuário com óculos diversity, quero analisar minhas antenas sem somar ganhos de forma incorreta.
+
+**Aceite:**
+
+- cada branch é calculado separadamente;
+- diversity de seleção pode usar o melhor branch sob as hipóteses existentes;
+- ganhos de duas antenas não são somados como array coerente;
+- limitação do modelo simplificado é exibida.
+
+## US-29 — Separar vídeo FPV de rádio-controle
+
+Como usuário Long Range, quero entender que alcance de vídeo e alcance do controle são links diferentes.
+
+**Aceite:**
+
+- análise FPV não declara alcance do rádio-controle;
+- warnings e resultados identificam explicitamente o link analisado;
+- futuro módulo RC pode reutilizar núcleo RF sem misturar sensibilidade/protocolo automaticamente.
+
+## US-30 — Otimização global futura
+
+Como usuário, quero informar objetivos e receber configurações candidatas explorando um espaço muito maior de combinações.
 
 **Aceite futuro:**
 
+- parte do recomendador básico já validado;
 - candidatos incompatíveis conhecidos são removidos;
 - ranking é multiobjetivo;
 - trade-offs são explicados;
 - fontes e confiança acompanham resultados;
+- pode dimensionar bateria/constraints iterativamente com critério de convergência;
+- pode incluir constraint de alcance FPV mantendo física RF separada da propulsão;
 - usuário pode transformar candidato em projeto editável.
 
 ## Uso em issues
