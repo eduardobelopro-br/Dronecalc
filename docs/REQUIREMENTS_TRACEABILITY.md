@@ -1,40 +1,41 @@
 # Matriz de Rastreabilidade de Requisitos — DroneCalc
 
-**Versão:** 0.4
+**Versão:** 0.5
 
 Este documento liga requisitos do PRD às especificações, etapas do roadmap e tipos de teste esperados.
 
 | Req. | Resumo | Especificação principal | Roadmap | Teste esperado |
 |---|---|---|---|---|
-| RF-01 | Projetos | PRODUCT_SPEC §2 | Fases 2 e 9 | integração/UI |
-| RF-02 | Componentes | COMPONENT_CATALOG | Fases 4, 5, 6 e 9 | schema/UI/ingestão |
-| RF-03 | Massa | CALCULATION_ENGINE §3 + PROPULSION_RECOMMENDATION §2–3 | Fases 3, 8 e 9 | unitário + fixture |
+| RF-01 | Projetos | PRODUCT_SPEC §2 | Fases 2 e 10 | integração/UI |
+| RF-02 | Componentes | COMPONENT_CATALOG | Fases 4, 5, 6 e 10 | schema/UI/ingestão |
+| RF-03 | Massa | CALCULATION_ENGINE §3 + PROPULSION_RECOMMENDATION §2–3 | Fases 3, 8 e 10 | unitário + fixture |
 | RF-04 | Energia | CALCULATION_ENGINE §5 | Fase 3 | unitário |
 | RF-05 | Sistema elétrico | CALCULATION_ENGINE §16 + PHYSICS_ENGINE | Fases 3 e 7 | unitário + limites |
 | RF-06 | Propulsão | CALCULATION_ENGINE §§7–9 + PHYSICS_ENGINE + BENCH_DATA_WORKSPACE | Fase 7 | unitário + fixture de curva/modelo |
-| RF-07 | Autonomia | CALCULATION_ENGINE §12 | Fases 3, 7, 8 e 9 | unitário + regressão |
+| RF-07 | Autonomia | CALCULATION_ENGINE §12 | Fases 3, 7, 8 e 10 | unitário + regressão |
 | RF-08 | Perfis de voo | FLIGHT_PROFILES + PROPULSION_RECOMMENDATION §6 | Fase 8 | unitário/scoring |
-| RF-09 | Compatibilidade | PRODUCT_SPEC §7 + PROPULSION_RECOMMENDATION §9 | Fases 3, 7, 8 e 9 | unitário + integração |
-| RF-10 | Proveniência | PRODUCT_SPEC §6 + ASSISTED_INGESTION + BENCH_DATA_WORKSPACE + PROPULSION_RECOMMENDATION | Todas as etapas técnicas | unitário + UI |
-| RF-11 | Comparação | PRODUCT_SPEC §8 | Fase 10 | integração/UI |
-| RF-12 | Unidades | CALCULATION_ENGINE §2 | Etapa 1D | unitário |
+| RF-09 | Compatibilidade | PRODUCT_SPEC §7 + PROPULSION_RECOMMENDATION §9 + FPV_LINK_BUDGET | Fases 3, 7, 8, 9 e 10 | unitário + integração |
+| RF-10 | Proveniência | PRODUCT_SPEC §6 + ASSISTED_INGESTION + BENCH_DATA_WORKSPACE + PROPULSION_RECOMMENDATION + FPV_LINK_BUDGET | Todas as etapas técnicas | unitário + UI |
+| RF-11 | Comparação | PRODUCT_SPEC §8 | Fase 11 | integração/UI |
+| RF-12 | Unidades | CALCULATION_ENGINE §2 + FPV_LINK_BUDGET §§5–6 | Etapa 1D + Fase 9 | unitário |
 | RF-13 | Persistência | DATA_MODEL | Fase 2 | integração/migrations |
-| RF-14 | Import/export | DATA_MODEL + BENCH_DATA_WORKSPACE | Etapa 7C e Fase 11 | integração |
+| RF-14 | Import/export | DATA_MODEL + BENCH_DATA_WORKSPACE | Etapa 7C e Fase 12 | integração |
 | RF-15 | Cadastro assistido multimodal | ASSISTED_INGESTION + MANUFACTURER_SCRAPING + PRODUCT_SPEC §11 | Fases 5 e 6 | segurança + schema + integração/UI |
-| RF-16 | Workspace Bancada | BENCH_DATA_WORKSPACE + PRODUCT_SPEC §12 + UX_SPEC §14.1 | Etapas 7A–7E | unitário + integração + UI |
-| RF-17 | Recomendação de propulsão orientada ao uso | PROPULSION_RECOMMENDATION + PRD §8.6 | Etapas 8D–8H e 9C | unitário + integração + ranking/UI |
+| RF-16 | Workspace Bancada | BENCH_DATA_WORKSPACE + PRODUCT_SPEC §12 + UX_SPEC | Etapas 7A–7E | unitário + integração + UI |
+| RF-17 | Recomendação de propulsão orientada ao uso | PROPULSION_RECOMMENDATION + PRD §8.6 | Etapas 8D–8H e 10C | unitário + integração + ranking/UI |
+| RF-18 | Alcance FPV / RF Link Budget | FPV_LINK_BUDGET + PRD §8.7 | Etapas 9A–9G e 10D | unitário + integração + UI |
 
 ## Requisitos não funcionais
 
 | Req. | Resumo | Evidência esperada |
 |---|---|---|
-| RNF-01 | Determinismo | testes do calculation engine e ranking |
-| RNF-02 | Testabilidade | domínio/motor/recomendador sem React e suite unitária |
-| RNF-03 | Rastreabilidade | formulaId/modelVersion/proveniência/evidência por campo + perfil/versão/motivos do ranking |
-| RNF-04 | Performance | medições quando UI/análise/ingestão/recomendador estiverem funcionais |
-| RNF-05 | Acessibilidade | UX spec + testes/inspeção, inclusive tabela/gráficos de Bancada e explicação do ranking |
+| RNF-01 | Determinismo | testes do calculation engine, ranking e RF link budget |
+| RNF-02 | Testabilidade | domínio/motor/recomendador/RF sem React e suite unitária |
+| RNF-03 | Rastreabilidade | formulaId/modelVersion/proveniência/evidência por campo + perfil/versão/motivos do ranking + inputs RF |
+| RNF-04 | Performance | medições quando UI/análise/ingestão/recomendador estiverem funcionais; link budget básico é cálculo determinístico de baixo custo |
+| RNF-05 | Acessibilidade | UX spec + testes/inspeção, inclusive Bancada, ranking e resultados RF |
 | RNF-06 | Internacionalização | regras sem dependência de strings pt-BR |
-| RNF-07 | Evolução | perfis/data-driven, módulos desacoplados e AI Provider substituível |
+| RNF-07 | Evolução | perfis/data-driven, módulos desacoplados, AI Provider substituível e núcleo RF extensível |
 | RNF-08 | Segurança de dados/ingestão | secrets ausentes, anti-SSRF, schema validation, staging e prompt-injection boundaries |
 
 ## Cenários de aceite de produto
@@ -238,6 +239,62 @@ Rastreia: RF-10, RF-17, RNF-03.
 **Então** o cruzeiro não é tratado como corrente zero; a cobertura é marcada como incompleta e o resultado é limitado/indisponível conforme contrato.
 
 Rastreia: RF-07, RF-08, RF-17, RNF-03.
+
+### AC-26 — Link budget na distância-alvo
+
+**Dado** frequência, potência VTX, ganhos/perdas, sensibilidade e margem desejada válidos  
+**Quando** o operador informa uma distância-alvo  
+**Então** o sistema calcula FSPL, potência recebida, margem disponível e headroom, indicando `pass/borderline/fail` conforme regra versionada.
+
+Rastreia: RF-12, RF-18, RNF-01, RNF-03.
+
+### AC-27 — Solver de potência VTX
+
+**Dado** distância-alvo, frequência, antenas/perdas, sensibilidade e margem  
+**Quando** o usuário solicita a potência necessária  
+**Então** o sistema retorna potência teórica mínima em dBm e mW e informa que isso não representa autorização regulatória nem garantia de alcance real.
+
+Rastreia: RF-18, RNF-03, RNF-05.
+
+### AC-28 — Realized gain sem dupla perda
+
+**Dado** antena com ganho marcado como `realized-gain` e SWR/eficiência também disponíveis  
+**Quando** o link budget é calculado  
+**Então** o sistema não desconta novamente perdas já incluídas no realized gain e registra a decisão semântica.
+
+Rastreia: RF-10, RF-18, RNF-01, RNF-03.
+
+### AC-29 — Gain kind desconhecido
+
+**Dado** ganho de antena sem indicação se é directivity/gain/realized-gain  
+**Quando** SWR ou eficiência separados são informados  
+**Então** o sistema não aplica perdas potencialmente duplicadas silenciosamente e emite warning para revisão.
+
+Rastreia: RF-10, RF-18, RNF-03.
+
+### AC-30 — Diversity simplificado
+
+**Dado** óculos/VRX com duas antenas em diversity de seleção  
+**Quando** o cálculo é executado  
+**Então** cada branch é avaliado separadamente e o sistema não soma os ganhos das duas antenas como array coerente.
+
+Rastreia: RF-18, RNF-01, RNF-03.
+
+### AC-31 — Espaço livre não é alcance garantido
+
+**Dado** qualquer distância máxima derivada de FSPL  
+**Quando** exibida ao usuário  
+**Então** o rótulo informa **distância teórica máxima em espaço livre** e a UI apresenta limitações de obstáculos, orientação, multipath/interferência e status regulatório não verificado.
+
+Rastreia: RF-18, RNF-03, RNF-05.
+
+### AC-32 — Vídeo e rádio-controle separados
+
+**Dado** projeto Long Range com link FPV calculado  
+**Quando** a análise é exibida  
+**Então** o sistema não afirma que o rádio-controle possui o mesmo alcance e não funde os dois links silenciosamente.
+
+Rastreia: RF-18, RNF-03, RNF-07.
 
 ## Atualização da matriz
 
